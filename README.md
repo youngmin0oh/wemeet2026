@@ -13,11 +13,19 @@ PPO, SAC, DDPG, and SAC with hindsight experience replay (HER).
 
 ## Setup
 
+> 처음 설치한다면 단계별 한국어 매뉴얼 [docs/MANUAL.md](docs/MANUAL.md) 를 따라 하세요
+> (ngspice 설치, GPU 별 torch, 학습, 연습 예제, ALIGN 자동 레이아웃까지).
+
 ```bash
 conda env create -f environment.yml
 conda activate analog_sizing
-sudo apt-get install ngspice
+conda install -c conda-forge ngspice   # or: sudo apt-get install ngspice
 ```
+
+Run commands from the repository root so ngspice picks up the bundled `.spiceinit`
+(`set num_threads=1`). Without it, ngspice builds that default to several OpenMP
+threads oversubscribe the CPU when 16 corners run in parallel (179 s vs 0.27 s per
+TSA corner sweep on our server).
 
 Model paths are resolved from the source netlists when simulations run. No input
 file rewriting is required. Keep the bundled PDK files in `eval_engines/pdk/`.
