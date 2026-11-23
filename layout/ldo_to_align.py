@@ -67,10 +67,13 @@ def quantize_l(l_um):
 
 def params_from_log(path, task):
     txt = open(path).read()
-    pat = rf"eval task {task}: success=(\w+)\ntarget specs: \[.*?\]\ncur specs: \[.*?\]\nparams: \[(.*?)\]"
-    m = re.search(pat, txt, re.S)
-    if not m:
+    pat = rf"eval task {task}: success=(\w+)\ntarget specs: \[[^\]]*\]\ncur specs: \[[^\]]*\]\nparams: \[([^\]]*)\]"
+    ms = list(re.finditer(pat, txt))
+    if not ms:
         raise SystemExit(f"{path} 에서 eval task {task} 를 찾지 못했습니다.")
+    # 학습 중 eval 은 여러 번 돈다 -> 마지막(학습이 끝난 모델)의 결과를 쓴다
+    m = ms[-1]
+    print(f"[로그] eval task {task}: {len(ms)}번 중 마지막 결과 사용 (success={m.group(1)})")
     if m.group(1) != "True":
         print(f"[주의] eval task {task} 는 success=False 인 설계입니다.")
     return [float(x) for x in m.group(2).split()]

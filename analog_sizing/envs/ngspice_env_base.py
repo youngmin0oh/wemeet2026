@@ -35,6 +35,8 @@ class ngspice_env(gymnasium.Env, ABC):
             "spec_path", benchmark_config("TSA")["spec_path"]
         )
         self.SoF = env_config.get("SoF", True)
+        # Simulate only the nominal TT netlist (dsn_netlist[0]) and ignore PVT corners.
+        self.tt_only = env_config.get("tt_only", False)
         self.lookup_style = env_config.get("lookup_style", "normd")
         self.min_threshold = env_config.get("min_threshold", -6.0)
         self.tt_threshold = env_config.get("tt_threshold", -1.0)
@@ -68,7 +70,7 @@ class ngspice_env(gymnasium.Env, ABC):
         self.full_sim = 0
         self.tt_sim = 0
         self.horizon = self.episode_len
-        self.num_corners = len(yaml_data["dsn_netlist"])
+        self.num_corners = 1 if self.tt_only else len(yaml_data["dsn_netlist"])
 
         # param array
         params = yaml_data["params"]
@@ -89,17 +91,24 @@ class ngspice_env(gymnasium.Env, ABC):
         # initialize sim environment
         tt_design_netlist = [yaml_data["dsn_netlist"][0]]
         corner_design_netlists = yaml_data["dsn_netlist"][1:]
-        self.corner_sim_env = CircuitClass(
-            yaml_path=self.CIR_YAML,
-            path=ngspice_env.path,
-            design_netlists=corner_design_netlists,
-        )
         self.tt_sim_env = CircuitClass(
             yaml_path=self.CIR_YAML,
             path=ngspice_env.path,
             design_netlists=tt_design_netlist,
         )
-        self.full_sim_env = CircuitClass(yaml_path=self.CIR_YAML, path=ngspice_env.path)
+        if self.tt_only:
+            # Every simulation set of a TT-only environment is the nominal netlist.
+            self.corner_sim_env = None
+            self.full_sim_env = self.tt_sim_env
+        else:
+            self.corner_sim_env = CircuitClass(
+                yaml_path=self.CIR_YAML,
+                path=ngspice_env.path,
+                design_netlists=corner_design_netlists,
+            )
+            self.full_sim_env = CircuitClass(
+                yaml_path=self.CIR_YAML, path=ngspice_env.path
+            )
 
         if env_config.get("action_type") == "discrete":
             self.action_meaning = [-1, 0, 2]
@@ -220,7 +229,7 @@ class ngspice_env(gymnasium.Env, ABC):
         (cur_spec_norm, reward, tt_done, all_specs, worst_idx, corner_norm_std) = (
             self._evaluate_params()
         )
-        if self.SoF and not tt_done:
+        if self.tt_only or (self.SoF and not tt_done):
             self.tt_sim += 1
         else:
             self.full_sim += 1
@@ -289,7 +298,9 @@ class ngspice_env(gymnasium.Env, ABC):
         """
         tt_done = False
         skipped_corners = False
-        if self.SoF:
+        if self.tt_only:
+            all_specs = np.asarray(self.update(self.cur_params, self.tt_sim_env))
+        elif self.SoF:
             nominal = self.update(self.cur_params, self.tt_sim_env)[0]
             nominal_diff = self.aggregate(nominal, self.specs_ideal)
             if nominal_diff < 0:
@@ -314,6 +325,9 @@ class ngspice_env(gymnasium.Env, ABC):
             norms.flatten() if self.concat_all_specs else norms[worst_idx, columns]
         )
         spec_diff = self.aggregate(self.cur_specs, self.specs_ideal)
+        if self.tt_only:
+            # The nominal corner is the whole evaluation, so passing TT is success.
+            tt_done = bool(spec_diff >= 0)
 
         if skipped_corners:
             reward = self.tt_threshold + (self.tt_threshold - self.min_threshold) * (
@@ -321,7 +335,10 @@ class ngspice_env(gymnasium.Env, ABC):
             )
             corner_norm_std = 1.0
         else:
-            threshold = self.tt_threshold if self.SoF else self.min_threshold
+            # Without a TT stage before the corners, use the full reward range.
+            threshold = (
+                self.tt_threshold if self.SoF and not self.tt_only else self.min_threshold
+            )
             reward = (
                 -threshold * spec_diff / len(self.specs_id) if spec_diff < 0 else 30.0
             )

@@ -243,6 +243,28 @@ bash scripts/TSA.sh --algo SAC --seed 42     # 옵션을 뒤에 붙이면 덮어
 GPU가 여러 개면 `CUDA_VISIBLE_DEVICES=1 bash scripts/TSA.sh` 처럼 쓸 GPU를 고를 수 있습니다.
 터미널을 닫아도 계속 돌게 하려면 `nohup bash scripts/TSA.sh > tsa.log 2>&1 &` 로 실행합니다.
 
+**TT 만 보는 환경 (PVT corner 없이)**
+
+기본 환경은 공정·전압·온도(PVT)를 바꾼 여러 corner(TSA·CMA·COMP 17개, LDO 9개)에서 최악값으로 성공을 판단합니다.
+`--tt_only True` 를 붙이면 기본 corner(TT, yaml `dsn_netlist` 의 첫 번째 넷리스트) 하나만 시뮬레이션합니다.
+처음 연습하거나, 공정 변화 없이 스펙만 맞추는 문제를 빨리 보고 싶을 때 씁니다.
+
+```bash
+bash scripts/LDO.sh --tt_only True                      # HER
+bash scripts/LDO.sh --tt_only True --algo SAC
+python scripts/random_rollout.py --env LDO --tt-only    # 학습 없이 환경만 돌려 보기
+```
+
+| | 기본 (PVT) | `--tt_only True` |
+|---|---|---|
+| step 당 시뮬레이션 | TT 1번, TT 를 통과하면 나머지 corner 전부 | 항상 TT 1번 |
+| 성공 조건 | 모든 corner 의 최악값이 목표 만족 | TT 값이 목표 만족 |
+| 평가(`eval/success_rate`) | 모든 corner 기준 | TT 기준 (학습 설정을 그대로 따라감) |
+
+- TT 에서 성공한 설계도 다른 corner 에서는 떨어질 수 있습니다. 실제 회로에 쓸 설계는 PVT 환경으로 다시 확인하세요
+  (LDO 는 `layout/check_ldo_quantized.py` 가 9개 corner 를 모두 돌려 확인합니다).
+- 텐서보드의 `simulation/total_sim` 은 step 수와 같아집니다 (step 당 1번).
+
 ### 7-3. 진행 상황 보기 (TensorBoard)
 
 ```bash
@@ -261,9 +283,14 @@ tensorboard --logdir logs --port 6006
 | TSA (평가 목표 10개) | 77% | 73% | 비슷함. 초반(3000 step)은 SAC 가 더 빠름 (40% vs 23%) |
 | COMP (평가 목표 100개) | 68% | 63% | 비슷함. HER 이 seed 에 덜 흔들림 (66–72% vs 54–72%) |
 | LDO (평가 목표 100개) | 21% | 21% | 같음. 둘 다 어려워함. SAC 가 seed 에 덜 흔들림 (20–22% vs 6–35%) |
-| CMA (평가 목표 100개) | 26% (seed 50) | 48% (seed 50) | seed 마다 크게 갈려서 판단 보류 |
+| CMA (평가 목표 100개) | 40% (seed 42: 53%, seed 50: 26%) | 48% (seed 50) | seed 마다 크게 갈려서 판단 보류 |
 
 - SAC 만으로도 학습은 잘 됩니다. 다만 `--algo SAC` 로 바꾸면 `train.py` 가 Pareto 목표 샘플링(`pareto_freq`)도 함께 끕니다.
+- LDO 에서 SAC 가 찾은 설계도 9개 corner 를 다시 시뮬레이션해 확인했습니다. 레이아웃 예제와 같은 목표(eval task 25)에서
+  SAC seed 123 설계는 9개 스펙을 모두 통과하고, seed 42 설계는 위상 여유 하나가 59.82° (목표 60.01°) 로 0.3% 모자랍니다.
+  찾은 크기도 HER 과 비슷합니다 (패스 소자 약 70µm × 100–110개, RFB 400Ω).
+- 성공 판정(`aggregate`)은 목표 대비 위반 합이 **2% 이내면 성공**으로 칩니다. 그래서 `success=True` 설계도
+  한두 스펙이 아주 조금 모자랄 수 있습니다. 위의 seed 42 설계가 그런 경우입니다.
 - LDO, CMA 는 두 방법 모두 성공률이 낮은(20–50%) 어려운 회로라 스크립트의 기본 학습 길이로는 충분히 수렴하지 않습니다.
 
 ### 7-5. 학습이 찾은 설계 꺼내 보기
@@ -279,6 +306,11 @@ params: [4.819 1.789 68.717 0.5 30.125 1.418 71.469 0.5 100 1.4 400 9.39e-13 4.0
 
 `params` 순서는 `eval_engines/ngspice/ngspice_inputs/yaml_files/<회로>.yaml` 의 `params:` 순서와 같습니다.
 이 값을 [9장](#9-레이아웃-자동-생성-align) 의 레이아웃 생성에 그대로 넣을 수 있습니다.
+
+- 평가는 학습 중 `--eval_freq` 마다 여러 번 돌기 때문에 같은 `eval task 25` 가 로그에 여러 번 나옵니다.
+  학습이 끝난 모델의 결과인 **마지막** 것을 쓰세요. `layout/ldo_to_align.py --log` 는 자동으로 마지막 것을 씁니다.
+- `success=True` 는 위반 합 2% 이내까지 포함합니다 ([7-4](#7-4-her-을-안-쓰고-sac-만-써도-되나-직접-비교한-결과)).
+  `--tt_only True` 로 학습했다면 TT 에서만 확인한 결과입니다.
 
 ---
 
@@ -407,10 +439,17 @@ bash layout/run_ldo_layout.sh --params "4.819 1.789 68.72 0.5 30.12 1.418 71.47 
   M6  W  7147.000um ->  7148.400um (nfin=10, nf=2, m=1702, err +0.0%) | L 0.500um -> stack 4 = 0.60um
   보상 RC (RFB 400 ohm, CFB 939.0 fF) 는 넣지 않음 -> 핀 n_amp, vreg 사이에 SKY130 poly 저항 + MIM cap 을 따로 연결
 == 3/4 ALIGN 자동 배치·배선 (수 분 걸립니다)
-ALIGN 자체 LVS/DRC 검사: 오류 없음
+ALIGN 자체 LVS/DRC 검사: 오류 없음 (short 0, open 0, DRC 0)
+  [참고] 로그의 'DIFFERENT WIDTH: 4' 는 ALIGN 이 오류로 세지 않는 항목입니다
+         (같은 중심선 위 사각형의 폭 차이. short/open 아님. 목록: run/3_pnr/*.errors)
 == 4/4 GDS -> PNG
 layout/work/ldo_rl/ldo_rl.png: LDO_RL_0 264.9 x 172.4 um, 59,669 polygons
 ```
+
+`run/align.log` 에는 `remove_duplicates ERROR : Found errors: SHORT: 0 OPEN: 0 DIFFERENT WIDTH: 4` 줄이 빨간 ERROR 로 찍힙니다.
+ALIGN 은 short · open · DRC 위반만 LVS/DRC 오류로 셉니다. `DIFFERENT WIDTH` 는 그 개수에 넣지 않는 참고 항목입니다.
+이 예제의 4건은 트랜지스터 조각 안 Poly 사각형의 폭 차이라 연결(LVS)과는 상관없습니다. 그래도 SKY130 공식 DRC 는 아니므로
+제작용이면 Magic DRC 로 다시 확인해야 합니다 ([9-8](#9-8-한계와-다음-단계)).
 
 ![RL 이 크기를 정한 LDO 의 ALIGN 레이아웃](img/ldo_rl_layout.png)
 
@@ -516,7 +555,8 @@ python layout/postlayout_ldo.py --align_dir layout/work/ldo_rl
 
 ### 9-6. 결과 보기
 
-- **PNG**: `layout/work/ldo_rl/ldo_rl.png` 를 그냥 열면 됩니다.
+- **PNG**: `layout/work/ldo_rl/ldo_rl.png` 를 그냥 열면 됩니다 (스크립트를 돌리면 생김).
+  돌리지 않고 미리 보려면 저장소에 들어 있는 `docs/img/ldo_rl_layout.png` (기본 예제 설계) 를 엽니다.
 - **KLayout** (레이아웃 전용 뷰어, 확대·층 켜고 끄기 가능): `conda install -c conda-forge klayout` 후 `klayout layout/work/ldo_rl/run/LDO_RL_0.gds`
   (원격 서버라면 GDS 파일을 내 PC 로 복사해서 [KLayout 설치본](https://www.klayout.de/build.html)으로 엽니다.)
 

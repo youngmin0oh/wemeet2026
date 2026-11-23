@@ -112,6 +112,15 @@ class ngspice_env_goal(ngspice_env_cont):
         )
 
         base_r = self.reward_batch(cur_specs, goal_specs)
+        if self.tt_only:
+            # With only TT simulated, the achieved goal is the complete result,
+            # so success is decided again for the relabeled goal (as in step).
+            reward = torch.where(
+                base_r >= 0,
+                torch.full_like(base_r, 30.0),
+                -self.min_threshold * (base_r / len(self.specs_id)),
+            )
+            return reward.cpu().numpy()
         if all_specs.shape[1] > 1:
             corner_std = (
                 torch.sqrt(

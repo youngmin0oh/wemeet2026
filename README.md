@@ -38,6 +38,7 @@ Run a short rollout with randomly sampled actions:
 ```bash
 python scripts/random_rollout.py --env TSA --episodes 1 --steps 2 --seed 0
 python scripts/random_rollout.py --env TSA --action-space discrete --steps 2
+python scripts/random_rollout.py --env LDO --steps 2 --tt-only
 ```
 
 The continuous command above produces the following complete output with the
@@ -120,7 +121,8 @@ passed to the circuit netlist.
 the sum of step rewards; this example ends after two steps with return -8.166371.
 The simulation line identifies the corners that were actually evaluated. Here
 only nominal TT runs because its goal checks fail. Add `--full-corners` to
-evaluate all configured corners at every reset and step.
+evaluate all configured corners at every reset and step, or `--tt-only` to
+simulate only the nominal TT netlist (the first `dsn_netlist` entry).
 
 The environment follows the Gymnasium reset/step API:
 
@@ -147,6 +149,11 @@ bash scripts/TSA.sh
 Launchers are also available for `CMA`, `LDO`, and `COMP`. Their arguments can be
 overridden by appending options, for example `bash scripts/TSA.sh --seed 42`.
 Both direct scripts and `python -m analog_sizing.train` are supported.
+
+By default, success requires the worst value over all PVT corners to meet every
+target. Add `--tt_only True` to train and evaluate on the nominal TT netlist only
+(one simulation per step), for example `bash scripts/LDO.sh --tt_only True`.
+Designs found this way are not checked across corners.
 
 Training and evaluation metrics are recorded locally using the SB3 logger.
 TensorBoard logs are written under `logs/<algorithm>/` and model directories

@@ -16,7 +16,9 @@ def print_state(env, observation, info):
     """Show every observation value alongside its physical meaning."""
     count = len(env.specs_id)
     name_width = max(24, *(len(name) for name in env.specs_id + env.params_id))
-    if env.SoF and not info["tt_done"]:
+    if env.tt_only:
+        print("  Simulation: nominal TT only (TT-only environment)")
+    elif env.SoF and not info["tt_done"]:
         print(
             f"  Simulation: nominal TT only; {env.num_corners - 1} other corners skipped"
         )
@@ -56,13 +58,21 @@ def main():
         action="store_true",
         help="Simulate every PVT corner at each step",
     )
+    parser.add_argument(
+        "--tt-only",
+        action="store_true",
+        help="Simulate only the nominal TT corner (ignore PVT corners)",
+    )
     args = parser.parse_args()
+    if args.full_corners and args.tt_only:
+        parser.error("--full-corners and --tt-only cannot be combined")
     if args.episodes < 1 or args.steps < 1:
         parser.error("--episodes and --steps must be positive")
     config = {
         **benchmark_config(args.env),
         "episode_len": args.steps,
         "SoF": not args.full_corners,
+        "tt_only": args.tt_only,
     }
     env_type = ngspice_env_disc if args.action_space == "discrete" else ngspice_env_cont
     env = env_type(config)
@@ -72,6 +82,7 @@ def main():
         params = len(env.params_id)
         print(
             f"Environment: {args.env} | actions={args.action_space} | seed={args.seed}"
+            + (" | TT only" if args.tt_only else "")
         )
         print(
             f"Observation: {env.observation_space.shape[0]} values "

@@ -168,6 +168,13 @@ from analog_sizing.envs.ngspice_env import ngspice_env_cont
     required=False,
 )
 @click.option(
+    "--tt_only",
+    help="Simulate only the nominal TT corner (training and evaluation)",
+    type=bool,
+    default=False,
+    required=False,
+)
+@click.option(
     "--lookup_style",
     help="Lookup style",
     type=click.Choice(["normd", "tanh"]),

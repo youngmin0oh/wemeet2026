@@ -26,13 +26,17 @@ class TrainingCallback(BaseCallback):
         self.env = env
         self.obs, _ = env.reset()
         self.SoF = env.SoF
+        self.tt_only = getattr(env, "tt_only", False)
         self.done_in_goal = getattr(env, "done_in_goal", False)
         self.obj_style = obj_style
         self.temp = temp
         self.pareto_freq = pareto_freq
 
     def _on_step(self) -> bool:
-        if self.SoF:
+        if self.tt_only:
+            self.total_sim += 1
+            self.tt_sim += 1
+        elif self.SoF:
             if self.locals["infos"][0].get("tt_done"):
                 self.total_sim += self.num_corners
                 self.full_sim += 1

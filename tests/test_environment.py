@@ -79,6 +79,44 @@ def test_worst_corners_and_observation_shape(circuit, skip_on_fail, concat):
     assert env.step(np.zeros(1))[3]
 
 
+def test_tt_only_ignores_corners(circuit):
+    config, rows = circuit
+    env = ngspice_env_cont({**config, "tt_only": True})
+    assert env.num_corners == 1
+    obs, info = env.reset(seed=0)
+    assert env.observation_space.contains(obs)
+    # The hot corner (80, 15) would fail; only nominal (120, 8) is simulated.
+    np.testing.assert_array_equal(info["cur_specs"], rows["nominal"])
+    assert info["all_specs"].shape == (1, 2)
+    obs, reward, terminated, truncated, info = env.step(np.zeros(1))
+    assert (reward, terminated, info["tt_done"]) == (30.0, True, True)
+    assert (info["tt_sim"], info["full_sim"]) == (1, 0)
+
+
+def test_tt_only_failure_uses_full_reward_range(circuit):
+    config, rows = circuit
+    rows["nominal"] = [90.0, 12.0]
+    env = ngspice_env_cont({**config, "tt_only": True})
+    env.reset(seed=0)
+    _, reward, terminated, _, info = env.step(np.zeros(1))
+    spec_diff = env.aggregate(info["cur_specs"], env.specs_ideal)
+    assert reward == pytest.approx(-env.min_threshold * spec_diff / 2)
+    assert env.min_threshold < reward < 0
+    assert (terminated, info["tt_done"], info["tt_sim"]) == (False, False, 1)
+
+
+@pytest.mark.parametrize("nominal", [[120.0, 8.0], [90.0, 12.0]])
+def test_tt_only_hindsight_reward_matches_step_reward(circuit, nominal):
+    config, rows = circuit
+    rows["nominal"] = nominal
+    env = ngspice_env_goal({**config, "tt_only": True})
+    env.reset(seed=0)
+    obs, reward, _, _, info = env.step(np.zeros(1))
+    batch = {key: np.stack([value]) for key, value in obs.items()}
+    relabeled = env.compute_reward(batch["achieved_goal"], batch["desired_goal"], [info])
+    np.testing.assert_allclose(relabeled, [reward], rtol=1e-4)
+
+
 @pytest.mark.parametrize("env_type", [ngspice_env_cont, ngspice_env_disc])
 def test_seeded_reset_and_framework_contract(circuit, env_type):
     config, _ = circuit
