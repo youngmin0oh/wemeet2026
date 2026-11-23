@@ -1,0 +1,565 @@
+% xelatex analog_sizing_envs.tex  (두 번 실행: 전체 페이지 수 반영)
+\documentclass[aspectratio=169,11pt,xcolor=table]{beamer}
+
+% ---------------- Fonts ----------------
+% 한글: fonts/ 의 Noto Sans (Mono) CJK KR 정적 subset
+%   (시스템 Noto CJK는 variable font라 xelatex(xdvipdfmx)로 임베드가 안 됨)
+%   xeCJK 없이 한글을 일반 글자로 취급 → 띄어쓰기 단위로만 줄바꿈
+\usepackage{fontspec}
+\setsansfont{NotoSansKR-sub-Regular.otf}[Path=fonts/, BoldFont=NotoSansKR-sub-Bold.otf]
+\setmainfont{NotoSansKR-sub-Regular.otf}[Path=fonts/, BoldFont=NotoSansKR-sub-Bold.otf]
+\setmonofont{NotoSansMonoKR-sub-Regular.otf}[Path=fonts/, BoldFont=NotoSansMonoKR-sub-Bold.otf]
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs,tabularx,array}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,shapes.geometric,decorations.pathreplacing}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage[most]{tcolorbox}
+
+% ---------------- Colors ----------------
+\definecolor{ink}{HTML}{1B2A41}
+\definecolor{brand}{HTML}{1F5FA8}
+\definecolor{accent}{HTML}{D9622B}
+\definecolor{muted}{HTML}{6B7785}
+\definecolor{codebg}{HTML}{F2F4F7}
+\definecolor{okgreen}{HTML}{2E7D4F}
+\definecolor{c03}{HTML}{8A94A6}
+\definecolor{c04}{HTML}{1F5FA8}
+\definecolor{c05}{HTML}{D9622B}
+
+\setbeamercolor{normal text}{fg=ink}
+\setbeamercolor{structure}{fg=brand}
+\setbeamercolor{frametitle}{fg=brand}
+\setbeamercolor{title}{fg=ink}
+\setbeamercolor{alerted text}{fg=accent}
+\setbeamerfont{frametitle}{size=\Large,series=\bfseries}
+\setbeamerfont{title}{size=\huge,series=\bfseries}
+\setbeamerfont{subtitle}{size=\large}
+\setbeamersize{text margin left=1.1cm,text margin right=1.1cm}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize item}{\color{accent}\small$\bullet$}
+\setbeamertemplate{itemize subitem}{\color{muted}\small$\circ$}
+\setlength{\leftmargini}{1.2em}
+
+\setbeamertemplate{frametitle}{%
+  \vspace*{0.5em}%
+  \begin{minipage}{\textwidth}
+    {\usebeamerfont{frametitle}\usebeamercolor[fg]{frametitle}\insertframetitle}%
+    \hfill{\color{muted}\footnotesize\insertsectionhead}\par
+    \vspace{0.15em}{\color{accent}\rule{2.4em}{2pt}}
+  \end{minipage}%
+}
+\setbeamertemplate{footline}{%
+  \hbox to \paperwidth{\hfill{\color{muted}\scriptsize\insertframenumber\,/\,\inserttotalframenumber}\hspace*{1.1cm}}%
+  \vspace*{0.45cm}}
+\setbeamertemplate{title page}{%
+  \vspace*{1.0cm}
+  {\color{accent}\rule{3em}{3pt}}\par\vspace{0.8em}
+  {\usebeamerfont{title}\usebeamercolor[fg]{title}\inserttitle\par}
+  \vspace{0.6em}
+  {\usebeamerfont{subtitle}\color{muted}\insertsubtitle\par}
+  \vfill
+  {\small\color{muted}\insertdate\par}
+  \vspace*{0.6cm}
+}
+
+% ---------------- Boxes / Tables / Code ----------------
+\newtcolorbox{keybox}[1][]{enhanced,colback=brand!6,colframe=brand!6,coltext=ink,
+  arc=2pt,boxrule=0pt,left=6pt,right=6pt,top=4pt,bottom=4pt,before skip=4pt,after skip=4pt,
+  halign=flush left,#1}
+\newtcolorbox{warnbox}[1][]{enhanced,colback=accent!9,colframe=accent!9,coltext=ink,
+  arc=2pt,boxrule=0pt,left=6pt,right=6pt,top=4pt,bottom=4pt,before skip=4pt,after skip=4pt,
+  halign=flush left,#1}
+\newcommand{\boxtitle}[1]{{\bfseries\color{brand}#1}\par\smallskip}
+\newcommand{\warntitle}[1]{{\bfseries\color{accent}#1}\par\smallskip}
+
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+\newcolumntype{H}[1]{>{\raggedright\arraybackslash\bfseries}p{#1}}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{#1}}
+\setlength{\aboverulesep}{0pt}
+\setlength{\belowrulesep}{0pt}
+\newenvironment{cmptable}[2][1.32]
+  {\footnotesize\renewcommand{\arraystretch}{#1}\rowcolors{2}{codebg}{white}%
+   \tabularx{\textwidth}{#2}}
+  {\endtabularx\par}
+\newcommand{\hd}[1]{{\color{brand}\bfseries #1}}
+
+\lstdefinestyle{py}{
+  language=Python,
+  basicstyle=\ttfamily\scriptsize,
+  keywordstyle=\color{brand}\bfseries,
+  commentstyle=\color{muted},
+  stringstyle=\color{okgreen},
+  backgroundcolor=\color{codebg},
+  frame=single, framerule=0pt, rulecolor=\color{codebg},
+  framesep=4pt, xleftmargin=4pt, xrightmargin=4pt,
+  aboveskip=4pt, belowskip=4pt,
+  columns=fullflexible, keepspaces=true,
+  showstringspaces=false, upquote=true, breaklines=false,
+  texcl=true,   % 주석을 LaTeX로 조판 → 한글/영문 섞인 주석이 꼬이지 않음 (주석 속 _ ~ 는 escape)
+}
+\lstdefinestyle{sh}{style=py, language=bash, keywordstyle=\color{ink}}
+\lstset{style=py}
+\newcommand{\cc}[1]{\texttt{#1}}
+
+% ---------------- Meta ----------------
+\title{analog\_sizing/envs 쉽게 읽기}
+\subtitle{회로 설계를 강화학습 ‘게임’으로 바꾸는 방법}
+\date{2026. 11.}
+
+\begin{document}
+
+% ==================================================
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+% ==================================================
+\section{개요}
+
+\begin{frame}{한 줄 요약}
+  \begin{keybox}[colback=accent!9,colframe=accent!9]
+    \large 트랜지스터 크기 \textbf{7개}를 조금씩 바꿔 가며,\\
+    회로 성능 \textbf{6개}가 모두 목표를 넘으면 이기는 게임
+  \end{keybox}
+  \vspace{0.3em}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.485\textwidth}
+      \begin{keybox}[equal height group=sum1]
+        \boxtitle{관측 \ {\normalfont\small 무엇을 보나}}
+        지금 성능 6 + 목표 6 + 지금 크기 7\\
+        = 숫자 19개
+      \end{keybox}
+      \begin{keybox}[equal height group=sum2]
+        \boxtitle{보상 \ {\normalfont\small 점수}}
+        목표에 가까울수록 0에 가까운 음수\\
+        전부 맞추면 \textbf{+30}
+      \end{keybox}
+    \end{column}
+    \begin{column}{0.485\textwidth}
+      \begin{keybox}[equal height group=sum1]
+        \boxtitle{행동 \ {\normalfont\small 무엇을 하나}}
+        크기 7개를 각각 조금 늘리거나 줄이기
+      \end{keybox}
+      \begin{keybox}[equal height group=sum2]
+        \boxtitle{끝 \ {\normalfont\small 언제 끝나나}}
+        목표 달성 → \cc{terminated}\\
+        30번 시도 → \cc{truncated}
+      \end{keybox}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{풀려는 문제: 2단 증폭기 (TSA, GF180 공정)}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.43\textwidth}
+      \textbf{\color{brand}조절하는 값 (행동) 7개}\par\smallskip
+      \begin{cmptable}[1.25]{H{3.0cm}L}
+        \hd{이름} & \hd{범위} \\
+        \midrule
+        wp1 · wn1 · wp3 & 0.5 – 100 μm \\
+        wn3 · wn4 · wn5 & 0.5 – 100 μm \\
+        cc & 0.1 – 10 pF \\
+        \bottomrule
+      \end{cmptable}
+      \vspace{0.3em}
+      {\footnotesize\color{muted} w* = 트랜지스터 폭, cc = 보상용 커패시터}
+    \end{column}
+    \begin{column}{0.53\textwidth}
+      \textbf{\color{brand}맞춰야 하는 성능 6개}\par\smallskip
+      \begin{cmptable}[1.25]{H{2.4cm}L}
+        \hd{이름} & \hd{뜻} \\
+        \midrule
+        gain\_min & 증폭률 ≥ 목표 \\
+        ugbw\_min & 대역폭 ≥ 목표 \\
+        phm\_min & 위상 여유 ≥ 60° (안정성) \\
+        vswing\_min & 출력 범위 ≥ 목표 \\
+        ibias\_max & 전류(전력) ≤ 목표 \\
+        t\_settle\_max & 정착 시간 ≤ 목표 \\
+        \bottomrule
+      \end{cmptable}
+    \end{column}
+  \end{columns}
+  \vspace{0.4em}
+  {\small 이름 끝이 \cc{\_min}이면 \textbf{이상}, \cc{\_max}이면 \textbf{이하}여야 합격. \
+   CMA · LDO · COMP도 YAML만 바꿔 같은 env를 씁니다.}
+\end{frame}
+
+\begin{frame}[fragile]{ex01과 똑같은 Gymnasium 인터페이스}
+\begin{lstlisting}
+from analog_sizing.config import benchmark_config
+from analog_sizing.envs.ngspice_env import ngspice_env_cont
+
+env = ngspice_env_cont({**benchmark_config("TSA"), "episode_len": 30})
+obs, info = env.reset(seed=0)                  # 목표 하나를 정하고, 초기 회로를 시뮬레이션
+action = env.action_space.sample()             # 7개 값, 각각 [-1, 1] 범위
+obs, reward, terminated, truncated, info = env.step(action)
+\end{lstlisting}
+  \vspace{0.3em}
+  \begin{itemize}\small
+    \item 차이점: 화면 속 게임 대신 \textbf{ngspice(회로 시뮬레이터)}를 돌려서 성능을 잰다
+    \item step 한 번 = 시뮬레이션 1 – 17번 → Pendulum보다 훨씬 비쌈
+    \item 그래서 이 env의 많은 장치가 \textbf{시뮬레이션 횟수를 아끼는 것}과 관련됨
+  \end{itemize}
+\end{frame}
+
+% ==================================================
+\section{구조}
+
+\begin{frame}{파일 3개, 클래스 4개}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.5\textwidth}
+      \centering
+      \begin{tikzpicture}[
+          cls/.style={draw=brand!45, fill=brand!6, rounded corners=3pt, align=center,
+                      minimum width=2.7cm, minimum height=1.0cm, font=\footnotesize, text=ink},
+          base/.style={cls, draw=accent!60, fill=accent!8, minimum width=5.8cm},
+          arr/.style={-{Stealth[length=2mm]}, thick, draw=muted},
+        ]
+        \node[base] (b) at (0,0) {\textbf{ngspice\_env} \ (공통 뼈대)\\{\scriptsize ngspice\_env\_base.py}};
+        \node[cls] (d) at (-1.55,-1.7) {\textbf{ngspice\_env\_disc}\\{\scriptsize 이산 행동}};
+        \node[cls] (c) at (1.55,-1.7) {\textbf{ngspice\_env\_cont}\\{\scriptsize 연속 행동}};
+        \node[font=\scriptsize, text=muted] at (0,-2.45) {ngspice\_env.py};
+        \node[cls, draw=c05!60, fill=c05!8] (g) at (1.55,-3.55) {\textbf{ngspice\_env\_goal}\\{\scriptsize HER용 목표 조건부}};
+        \node[font=\scriptsize, text=muted, anchor=north] at (g.south) {ngspice\_env\_goal.py};
+        \draw[arr] (d) -- (d |- b.south);
+        \draw[arr] (c) -- (c |- b.south);
+        \draw[arr] (g) -- (c);
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{itemize}\small
+        \item \textbf{공통 뼈대}: reset / step, 시뮬레이션, 보상, 목표 고르기
+        \item \textbf{disc / cont}: ‘행동 → 크기’ 변환 함수 3개만 채움\\
+              {\footnotesize\cc{init\_params}, \cc{update\_params}, \cc{translate\_params}}
+        \item \textbf{goal}: 관측을 Dict로 바꾸고, HER용 보상 재계산
+      \end{itemize}
+      \vspace{0.3em}
+      \begin{keybox}
+        \small \cc{train.py}: HER → \cc{ngspice\_env\_goal}\\
+        PPO · SAC · DDPG → \cc{ngspice\_env\_cont}
+      \end{keybox}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{\cc{step()} 한 번에 일어나는 일}
+  \centering
+  \begin{tikzpicture}[
+      st/.style={draw=brand!45, fill=brand!6, rounded corners=3pt, align=center,
+                 minimum width=3.7cm, minimum height=1.45cm, font=\small, text=ink},
+      hl/.style={st, draw=accent!60, fill=accent!8},
+      arr/.style={-{Stealth[length=2.2mm]}, thick, draw=muted},
+    ]
+    \node[st] (s1) at (0,0)    {\textbf{① 행동 → 크기 변경}\\{\footnotesize\cc{update\_params}}};
+    \node[st] (s2) at (4.5,0)  {\textbf{② TT 시뮬레이션}\\{\footnotesize 기본 조건 1번}};
+    \node[hl] (s3) at (9.0,0)  {\textbf{③ TT 통과했나?}\\{\footnotesize 예 → 16 corner 추가}\\[-1pt]{\footnotesize 아니오 → 건너뜀}};
+    \node[st] (s4) at (0,-2.4)   {\textbf{④ 성능 정하기}\\{\footnotesize spec마다 가장 나쁜 corner}};
+    \node[hl] (s5) at (4.5,-2.4) {\textbf{⑤ 보상 계산}\\{\footnotesize 목표와 비교 − 편차 페널티}};
+    \node[st] (s6) at (9.0,-2.4) {\textbf{⑥ 관측 · 종료 판단}\\{\footnotesize 보상 ≥ 0 → terminated}\\[-1pt]{\footnotesize 30 step → truncated}};
+    \draw[arr] (s1) -- (s2);
+    \draw[arr] (s2) -- (s3);
+    \draw[arr] (s3.south) -- ++(0,-0.3) -| (s4.north);
+    \draw[arr] (s4) -- (s5);
+    \draw[arr] (s5) -- (s6);
+  \end{tikzpicture}
+  \vspace{0.5em}
+
+  {\small ②–⑤는 \cc{\_evaluate\_params()} 하나에 모여 있고, \cc{reset()}도 같은 함수를 씁니다.}
+\end{frame}
+
+% ==================================================
+\section{행동 · 관측}
+
+\begin{frame}{행동: 연속 vs 이산}
+  \begin{cmptable}{H{2.4cm}LL}
+    \hd{} & \hd{연속 (\cc{ngspice\_env\_cont})} & \hd{이산 (\cc{ngspice\_env\_disc})} \\
+    \midrule
+    action\_space & Box(−1, 1, (7,)) & MultiDiscrete([3] × 7) \ {\footnotesize\color{muted}(ex01 GridMoveEnv와 같은 종류)} \\
+    한 칸의 뜻 & 크기 += $a$ × (최댓값 / 30) & 101칸 눈금에서 −1칸 / 그대로 / +2칸 \\
+    한 번에 최대 & 폭 3.3 μm, cc 0.33 pF & 눈금 1 – 2칸 \\
+    범위 밖이면 & 최솟값 · 최댓값으로 자름 (clip) & 처음 / 끝 칸으로 자름 \\
+    시작 크기 & YAML의 \cc{init\_params} & \cc{init\_params}에 가장 가까운 칸 \\
+    \bottomrule
+  \end{cmptable}
+  \vspace{0.6em}
+  \begin{keybox}
+    연속 행동은 \textbf{30 step 동안 끝에서 끝까지} 움직일 수 있도록 한 step 크기를 (최댓값 / 30)으로 잡았습니다.
+  \end{keybox}
+\end{frame}
+
+\begin{frame}{관측: 숫자 19개 (TSA, seed 0 시작 상태)}
+  \centering
+  \begin{tikzpicture}[
+      seg/.style={draw=white, line width=1pt, minimum height=0.75cm, font=\small, text=ink, inner sep=0pt},
+    ]
+    \node[seg, fill=brand!14, minimum width=3.6cm] (a) at (0,0) {지금 성능 (정규화) 6};
+    \node[seg, fill=accent!14, minimum width=3.6cm, anchor=west] (b) at (a.east) {목표 (정규화) 6};
+    \node[seg, fill=codebg, minimum width=4.2cm, anchor=west] (c) at (b.east) {지금 크기 7};
+  \end{tikzpicture}
+  \vspace{0.3em}
+
+  \begin{cmptable}[1.2]{H{2.4cm}R{2.2cm}R{2.6cm}L}
+    \hd{예시} & \hd{실제 값} & \hd{관측에 들어가는 값} & \hd{설명} \\
+    \midrule
+    gain (지금) & 543.46 & 0.370 & 기준 250보다 큼 → + \\
+    gain (목표) & 229 & −0.044 & 기준 250보다 조금 작음 → − \\
+    phm (지금) & 29.2° & −0.345 & 기준 60°보다 많이 작음 \\
+    wp1 (크기) & 1.733e-05 & 1.733e-05 & 물리 단위(m) 그대로 \\
+    \bottomrule
+  \end{cmptable}
+  \vspace{0.3em}
+  {\footnotesize\color{muted} 값은 README의 \cc{random\_rollout.py} 출력. \cc{concat\_all\_specs=True}면 17개 corner 성능을 전부 넣음.}
+\end{frame}
+
+\begin{frame}{정규화(\cc{lookup}): 단위가 다른 성능을 같은 눈금으로}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.5\textwidth}
+      \begin{itemize}\small
+        \item gain 250, 전류 0.003 A, 대역폭 2e7 Hz\\
+              → 그대로 쓰면 크기가 제각각
+        \item 기준값 $g$와 비교한 \textbf{상대적인 차이}로 바꿈
+      \end{itemize}
+      \vspace{0.2em}
+      \begin{keybox}
+        \textbf{normd} \ $\dfrac{x - g}{x + g}$\\[3pt]
+        \textbf{tanh} \ \ $\dfrac{\tanh\big((x-g)/10g\big)}{\tanh(0.1)}$\\[3pt]
+        {\footnotesize env 기본: normd \ · \ train.py 기본: tanh}
+      \end{keybox}
+      {\small $x = g$이면 0, 크면 +, 작으면 −}\\[2pt]
+      {\footnotesize\color{muted} 관측: 기준 $g$ = YAML의 \cc{normalize} 값\\ 보상: 기준 $g$ = 이번 에피소드의 목표}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \centering
+      \begin{tikzpicture}
+        \begin{axis}[
+            width=6.4cm, height=5.4cm, xmin=0, xmax=3, ymin=-1.2, ymax=2.2,
+            axis lines=middle, xlabel={\scriptsize $x / g$}, ylabel={\scriptsize 정규화 값},
+            xlabel style={at={(axis description cs:1.0,0.35)}, anchor=south east}, ylabel style={anchor=south},
+            ticklabel style={font=\scriptsize}, xtick={0,1,2,3}, ytick={-1,0,1,2},
+            grid=major, grid style={draw=muted!15},
+            legend style={font=\scriptsize, draw=none, fill=white, at={(0.03,0.97)}, anchor=north west},
+            legend cell align=left]
+          \addplot[thick, c04, domain=0:3, samples=60] {(x-1)/(x+1)};
+          \addplot[thick, c05, domain=0:3, samples=60] {tanh((x-1)/10)/tanh(0.1)};
+          \legend{normd, tanh}
+        \end{axis}
+      \end{tikzpicture}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ==================================================
+\section{보상}
+
+\begin{frame}{보상 ①: spec 하나씩 채점하기}
+  \begin{enumerate}\small
+    \item spec마다 $r_i$ = \cc{lookup}(지금 성능, 목표) \ {\footnotesize\color{muted}(\cc{\_max} spec은 부호를 뒤집음)}
+    \item → \textbf{만족하면 +, 부족하면 −}
+    \item 부족한 것만 더함: \ $\text{spec\_diff} = \sum_i \min(0, r_i)$ \ {\footnotesize (−6 – 0)}
+    \item spec\_diff ≥ −0.02 이면 “전부 합격”
+  \end{enumerate}
+  \vspace{0.3em}
+  \begin{cmptable}[1.2]{H{2.4cm}R{2.0cm}R{2.0cm}R{1.3cm}L}
+    \hd{seed 0 시작} & \hd{지금} & \hd{목표} & \hd{$r_i$} & \hd{} \\
+    \midrule
+    gain\_min & 543.46 & ≥ 229 & +0.41 & 합격 \\
+    ibias\_max & 0.00056 & ≤ 0.0078 & +0.87 & 합격 \\
+    phm\_min & 29.2° & ≥ 60° & \textbf{−0.35} & \textbf{\color{accent}부족} \\
+    나머지 3개 & & & + & 합격 \\
+    \bottomrule
+  \end{cmptable}
+  \vspace{0.3em}
+  {\small → spec\_diff = −0.345 \ (위상 여유 하나만 부족)}
+\end{frame}
+
+\begin{frame}{보상 ②: 점수는 세 구간}
+  \centering
+  \begin{tikzpicture}[x=1.45cm]
+    \fill[c05!18] (-6,0) rectangle (-1,0.55);
+    \fill[c04!18] (-1,0) rectangle (0,0.55);
+    \fill[okgreen!22] (1.2,0) rectangle (2.2,0.55);
+    \draw[thick, muted] (-6,0) -- (0.3,0);
+    \draw[thick, muted, densely dotted] (0.3,0) -- (1.0,0);
+    \draw[thick, muted] (1.0,0) -- (2.4,0);
+    \foreach \v in {-6,-5,-4,-3,-2,-1,0} \draw[muted] (\v,0) -- (\v,-0.1) node[below, font=\scriptsize, text=ink] {$\v$};
+    \draw[muted] (1.7,0) -- (1.7,-0.1) node[below, font=\scriptsize, text=ink] {$+30$};
+    \node[font=\small, text=ink] at (-3.5,0.28) {TT(기본 조건)부터 실패};
+    \node[font=\scriptsize, text=ink, align=center] at (-0.5,0.28) {TT 통과\\corner 실패};
+    \node[font=\scriptsize, text=ink, align=center] at (1.7,0.28) {전부 합격};
+    \node[font=\scriptsize, text=muted] at (-3.5,-0.75) {$-1 + 5 \times \text{spec\_diff} / 6$};
+    \node[font=\scriptsize, text=muted] at (-0.5,-0.75) {$\text{spec\_diff} / 6$};
+    \node[font=\scriptsize, text=muted] at (1.7,-0.75) {terminated};
+    \draw[-{Stealth[length=2mm]}, thick, accent] (-1.29,1.25) -- (-1.29,0.6);
+    \node[font=\scriptsize, text=accent, anchor=south] at (-1.29,1.25) {seed 0 시작: −1.29 (위상 여유만 부족)};
+  \end{tikzpicture}
+  \vspace{0.5em}
+  \begin{itemize}\small
+    \item 점수가 \textbf{−1 위}로 올라오면 ‘기본 조건은 통과했다’는 뜻 → 단계별로 올라가는 계단
+    \item 마지막에 corner 편차 페널티 $-\alpha \cdot \text{std}$를 뺌 \ {\footnotesize\color{muted}($\alpha$ 기본 0.1, TSA.sh는 0)}
+    \item 보상 ≥ 0 이면 \cc{terminated} \ {\footnotesize\color{muted}(README 예시 step 보상 −4.53, −3.64도 이 식으로 그대로 재현됨)}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Corner와 SoF (Skip on Fail)}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.52\textwidth}
+      \centering
+      \begin{tikzpicture}[
+          cell/.style={draw=white, line width=1pt, fill=codebg, minimum width=1.0cm, minimum height=0.55cm,
+                       font=\scriptsize, text=ink, inner sep=0pt},
+        ]
+        \node[cell, fill=accent!20, minimum height=2.2cm, minimum width=1.15cm, align=center] (tt) at (-1.3,-0.825)
+             {\textbf{TT}\\3.3V\\27°C};
+        \foreach \c/\h [count=\j] in {3.0V/−40°C, 3.6V/−40°C, 3.0V/125°C, 3.6V/125°C}
+          \node[font=\tiny, text=muted, align=center] at (\j*1.0-0.5, 0.55) {\c\\\h};
+        \foreach \p [count=\i] in {ff, ss, fs, sf} {
+          \foreach \j in {1,...,4} \node[cell] at (\j*1.0-0.5, -\i*0.55+0.275) {\p};
+        }
+        \draw[decorate, decoration={brace, amplitude=4pt, mirror}, thick, muted]
+             (0,-2.3) -- (4,-2.3) node[midway, below=5pt, font=\scriptsize, text=ink] {TT가 실패하면 16개 모두 생략};
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{0.44\textwidth}
+      \begin{itemize}\small
+        \item 공정 · 전압 · 온도가 달라져도 동작해야 진짜 설계 → \textbf{17개 조건(corner)}
+        \item 성능 = spec마다 \textbf{가장 나쁜} corner 값
+        \item \textbf{SoF}: TT부터 실패면 나머지 16개는 볼 필요 없음 → 시뮬레이션 절약
+        \item 편차 페널티: corner 성능이 TT와 얼마나 다른지
+              {\footnotesize $\sqrt{\text{mean}\,(\text{corner}/\text{TT} - 1)^2}$, 0 – 1로 자름.\\ TT부터 실패면 1(최대)로 침}
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ==================================================
+\section{목표}
+
+\begin{frame}{목표는 reset마다 바뀐다}
+  \begin{cmptable}[1.3]{H{4.3cm}LL}
+    \hd{설정} & \hd{목표를 어디서?} & \hd{주로 쓰는 곳} \\
+    \midrule
+    generalize = False & YAML의 \cc{normalize} 값 하나로 고정 & 목표 하나만 풀 때 \\
+    generalize = True\newline online\_goal = False & pickle 목표 목록에서 하나 (검증 env는 순서대로) & 평가 env \\
+    generalize = True\newline online\_goal = True & YAML \cc{target\_specs} 범위에서 뽑기 + Pareto 샘플링 & 학습 env (\cc{train.py} 기본) \\
+    \bottomrule
+  \end{cmptable}
+  \vspace{0.6em}
+  \begin{keybox}
+    목표가 매번 달라야 \textbf{처음 보는 목표}에도 쓸 수 있는 정책이 됩니다 (generalization).
+  \end{keybox}
+\end{frame}
+
+\begin{frame}{Pareto 목표 샘플링: 이미 넘은 높이는 건너뛰기}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.46\textwidth}
+      \centering
+      \begin{tikzpicture}[x=0.95cm, y=0.8cm]
+        \fill[muted!18] (0,2.0) rectangle (1.5,5);
+        \fill[muted!18] (0,3.2) rectangle (3.0,5);
+        \fill[muted!18] (0,4.3) rectangle (4.5,5);
+        \draw[-{Stealth[length=2mm]}, thick, muted] (0,0) -- (5.3,0) node[below left, font=\scriptsize, text=ink, align=right] {gain 목표 → 어려움};
+        \draw[-{Stealth[length=2mm]}, thick, muted] (0,0) -- (0,5.3) node[right, font=\scriptsize, text=ink] {허용 전류 ↑ 쉬움};
+        \foreach \x/\y in {1.5/2.0, 3.0/3.2, 4.5/4.3} \fill[c04] (\x,\y) circle (3pt);
+        \node[font=\scriptsize, text=muted, align=center] at (1.5,3.85) {이미 해낸 것보다\\쉬움 → 버림};
+        \node[font=\scriptsize, text=c04, anchor=north west] at (1.55,1.95) {성공 기록};
+        \draw[thick, muted] (0.75,2.6) ++(-3pt,-3pt) -- ++(6pt,6pt) ++(-6pt,0) -- ++(6pt,-6pt);
+        \fill[c05] (3.6,1.4) circle (3pt) node[right, font=\scriptsize, text=c05] {새 후보 OK};
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{enumerate}\small
+        \item 성공한 목표를 기록. 더 어려운 성공이 나오면 쉬운 기록은 지움\\
+              → \textbf{지금까지 해낸 가장 어려운 목표들}만 남음
+        \item 다음 후보 16개: 범위에서 랜덤으로 뽑되, 기록보다 쉬운 것은 다시 뽑음
+        \item 학습 쪽 callback이 critic(Q)에게 물어 \textbf{어려워 보이는} 후보를 softmax로 고름 (\cc{set\_goal\_idx})
+      \end{enumerate}
+      {\footnotesize\color{muted} 성공 기록이 \cc{n\_warmup}개(TSA.sh는 4) 쌓이기 전에는 그냥 랜덤}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{\cc{ngspice\_env\_goal}: HER을 위한 env}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.5\textwidth}
+      \textbf{\color{brand}관측이 Dict 3칸으로}\par\smallskip
+      \begin{itemize}\small
+        \item \cc{observation}: 크기 7개\\{\footnotesize\color{muted}(TSA.sh는 \cc{goal\_in\_obs=False})}
+        \item \cc{achieved\_goal}: 지금 성능 6개 + [done, tt\_done]
+        \item \cc{desired\_goal}: 목표 6개 + [1, 1]
+      \end{itemize}
+      \vspace{0.3em}
+      \textbf{\color{brand}HER 아이디어}\par\smallskip
+      {\small 실패한 시도도 “그때 실제로 나온 성능이 목표였다면?”으로 바꿔 \textbf{성공 경험}으로 재활용 → \cc{compute\_reward()}가 바뀐 목표로 보상을 다시 계산}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \centering
+      \begin{tikzpicture}
+        \fill[ink] (0,0) circle (2.5pt) node[below, font=\scriptsize, text=ink] {시작};
+        \draw[thick, c04, -{Stealth[length=2.2mm]}] (0,0) .. controls (1.2,1.6) and (2.2,0.6) .. (3.2,1.2);
+        \fill[c04] (3.2,1.2) circle (2.5pt) node[below right, font=\scriptsize, text=c04, align=left] {실제 도착\\(achieved)};
+        \node[star, star points=5, fill=c05, inner sep=1.6pt] at (2.2,3.0) {};
+        \node[font=\scriptsize, text=c05, align=center, anchor=south] at (2.2,3.15) {원래 목표 (desired)\\→ 실패};
+        \draw[thick, densely dashed, muted, -{Stealth[length=2mm]}] (2.3,2.85) -- (3.1,1.4);
+        \node[font=\scriptsize, text=ink, align=left, anchor=west] at (2.85,2.25) {목표를 여기로\\옮겨 다시 저장\\→ 성공};
+      \end{tikzpicture}
+      \vspace{0.3em}
+
+      {\footnotesize ex04 SAC + replay buffer에서 \textbf{buffer 속 목표만 바꿔 쓰는 것}}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ==================================================
+\section{정리}
+
+\begin{frame}{자주 보는 설정값}
+  \begin{cmptable}[1.2]{H{3.2cm}R{2.4cm}R{2.4cm}L}
+    \hd{env\_config} & \hd{env 기본} & \hd{train.py 기본} & \hd{뜻} \\
+    \midrule
+    episode\_len & 30 & 30 & 에피소드 최대 step \\
+    SoF & True & True & TT 실패면 corner 생략 \\
+    lookup\_style & normd & \textbf{tanh} & 정규화 방식 \\
+    min / tt\_threshold & −6 / −1 & −6 / −1 & 보상 구간 경계 \\
+    alpha & 0.1 & 0.1 \ {\footnotesize(TSA.sh 0)} & corner 편차 페널티 \\
+    online\_goal & False & \textbf{True} & 범위에서 목표 뽑기 \\
+    pareto\_freq / n\_warmup & 0 / 4 & 1 / 2 \ {\footnotesize(HER 외 0)} & Pareto 샘플링 \\
+    goal\_in\_obs & True & \textbf{False} & 관측에 성능 · 목표 포함 \\
+    \bottomrule
+  \end{cmptable}
+  \vspace{0.4em}
+  {\small env 기본값과 \cc{train.py} 기본값이 다른 항목(굵게)이 있으니, 실험할 땐 어느 쪽인지 확인}
+\end{frame}
+
+\begin{frame}{읽으면서 확인해볼 점}
+  \begin{itemize}\small
+    \item \textbf{크기 값이 정규화 없이 관측에 들어감} (예: 1.7e-05 m, 3.5e-12 F)\\
+          {\footnotesize TSA.sh처럼 \cc{goal\_in\_obs=False}면 관측이 이 7개뿐 → 신경망 입력이 거의 0. VecNormalize 등도 없음}
+    \item \textbf{이산 행동이 비대칭}: \cc{action\_meaning = [-1, 0, 2]} (내릴 땐 1칸, 올릴 땐 2칸)
+    \item \textbf{보상 구간 경계가 둘}: 실제 step은 \cc{tt\_threshold}(−1), HER 재계산은 \cc{tt\_threshold\_2}(−3)\\
+          {\footnotesize 같은 상태라도 진짜 transition과 relabel된 transition의 점수 눈금이 다름}
+    \item \textbf{reset()의 시뮬레이션은 집계 안 됨}: \cc{tt\_sim} / \cc{full\_sim}, callback 모두 step만 셈
+    \item \textbf{\cc{is\_dominated}가 \cc{"phm\_min"} 이름을 직접 예외 처리} → 다른 회로에 ‘한 점짜리’ spec이 있으면 따로 챙겨야 함
+  \end{itemize}
+  \vspace{0.2em}
+  {\footnotesize\color{muted} 버그라고 단정한 것이 아니라, 의도한 설계인지 확인해 볼 만한 지점들입니다.}
+\end{frame}
+
+\begin{frame}{정리}
+  \begin{keybox}
+    \begin{itemize}\small
+      \item 회로 sizing = \textbf{크기 7개를 움직여 성능 6개를 목표 이상으로} 만드는 Gymnasium 게임
+      \item 보상은 계단식: \textbf{TT 실패 (−6 – −1) → corner 실패 (−1 – 0) → 합격 (+30)}
+      \item 시뮬레이션이 비싸서 \textbf{SoF}로 TT부터 확인하고, 실패하면 16개 corner 생략
+      \item 목표가 매번 바뀌고, \textbf{Pareto 샘플링}으로 점점 어려운 목표를 연습
+      \item HER용 \cc{ngspice\_env\_goal}은 관측을 Dict로 바꾸고 보상을 다시 계산
+    \end{itemize}
+  \end{keybox}
+  \vspace{0.4em}
+  {\small 다음에 볼 곳: \cc{analog\_sizing/callbacks.py} (목표 선택, 시뮬레이션 집계), \cc{analog\_sizing/train.py} (알고리즘 설정)}
+\end{frame}
+
+\end{document}

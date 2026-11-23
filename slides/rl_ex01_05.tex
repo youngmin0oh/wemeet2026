@@ -1,0 +1,713 @@
+% xelatex rl_ex01_05.tex  (두 번 실행: 전체 페이지 수 반영)
+\documentclass[aspectratio=169,11pt,xcolor=table]{beamer}
+
+% ---------------- Fonts ----------------
+% 한글: fonts/ 의 Noto Sans (Mono) CJK KR 정적 subset
+%   (시스템 Noto CJK는 variable font라 xelatex(xdvipdfmx)로 임베드가 안 됨)
+%   xeCJK 없이 한글을 일반 글자로 취급 → 띄어쓰기 단위로만 줄바꿈
+\usepackage{fontspec}
+\setsansfont{NotoSansKR-sub-Regular.otf}[Path=fonts/, BoldFont=NotoSansKR-sub-Bold.otf]
+\setmainfont{NotoSansKR-sub-Regular.otf}[Path=fonts/, BoldFont=NotoSansKR-sub-Bold.otf]
+\setmonofont{NotoSansMonoKR-sub-Regular.otf}[Path=fonts/, BoldFont=NotoSansMonoKR-sub-Bold.otf]
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs,tabularx,array}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage[most]{tcolorbox}
+
+% ---------------- Colors ----------------
+\definecolor{ink}{HTML}{1B2A41}
+\definecolor{brand}{HTML}{1F5FA8}
+\definecolor{accent}{HTML}{D9622B}
+\definecolor{muted}{HTML}{6B7785}
+\definecolor{codebg}{HTML}{F2F4F7}
+\definecolor{okgreen}{HTML}{2E7D4F}
+\definecolor{c03}{HTML}{8A94A6}
+\definecolor{c04}{HTML}{1F5FA8}
+\definecolor{c05}{HTML}{D9622B}
+
+\setbeamercolor{normal text}{fg=ink}
+\setbeamercolor{structure}{fg=brand}
+\setbeamercolor{frametitle}{fg=brand}
+\setbeamercolor{title}{fg=ink}
+\setbeamercolor{alerted text}{fg=accent}
+\setbeamerfont{frametitle}{size=\Large,series=\bfseries}
+\setbeamerfont{title}{size=\huge,series=\bfseries}
+\setbeamerfont{subtitle}{size=\large}
+\setbeamersize{text margin left=1.1cm,text margin right=1.1cm}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize item}{\color{accent}\small$\bullet$}
+\setbeamertemplate{itemize subitem}{\color{muted}\small$\circ$}
+\setlength{\leftmargini}{1.2em}
+
+\setbeamertemplate{frametitle}{%
+  \vspace*{0.5em}%
+  \begin{minipage}{\textwidth}
+    {\usebeamerfont{frametitle}\usebeamercolor[fg]{frametitle}\insertframetitle}%
+    \hfill{\color{muted}\footnotesize\insertsectionhead}\par
+    \vspace{0.15em}{\color{accent}\rule{2.4em}{2pt}}
+  \end{minipage}%
+}
+\setbeamertemplate{footline}{%
+  \hbox to \paperwidth{\hfill{\color{muted}\scriptsize\insertframenumber\,/\,\inserttotalframenumber}\hspace*{1.1cm}}%
+  \vspace*{0.45cm}}
+\setbeamertemplate{title page}{%
+  \vspace*{1.0cm}
+  {\color{accent}\rule{3em}{3pt}}\par\vspace{0.8em}
+  {\usebeamerfont{title}\usebeamercolor[fg]{title}\inserttitle\par}
+  \vspace{0.6em}
+  {\usebeamerfont{subtitle}\color{muted}\insertsubtitle\par}
+  \vfill
+  {\small\color{muted}\insertdate\par}
+  \vspace*{0.6cm}
+}
+
+% ---------------- Boxes / Tables / Code ----------------
+\newtcolorbox{keybox}[1][]{enhanced,colback=brand!6,colframe=brand!6,coltext=ink,
+  arc=2pt,boxrule=0pt,left=6pt,right=6pt,top=4pt,bottom=4pt,before skip=4pt,after skip=4pt,
+  halign=flush left,#1}
+\newtcolorbox{warnbox}[1][]{enhanced,colback=accent!9,colframe=accent!9,coltext=ink,
+  arc=2pt,boxrule=0pt,left=6pt,right=6pt,top=4pt,bottom=4pt,before skip=4pt,after skip=4pt,
+  halign=flush left,#1}
+\newcommand{\boxtitle}[1]{{\bfseries\color{brand}#1}\par\smallskip}
+\newcommand{\warntitle}[1]{{\bfseries\color{accent}#1}\par\smallskip}
+
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+\newcolumntype{H}[1]{>{\raggedright\arraybackslash\bfseries}p{#1}}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{#1}}
+\setlength{\aboverulesep}{0pt}
+\setlength{\belowrulesep}{0pt}
+\newenvironment{cmptable}[2][1.32]
+  {\footnotesize\renewcommand{\arraystretch}{#1}\rowcolors{2}{codebg}{white}%
+   \tabularx{\textwidth}{#2}}
+  {\endtabularx\par}
+\newcommand{\hd}[1]{{\color{brand}\bfseries #1}}
+
+\lstdefinestyle{py}{
+  language=Python,
+  basicstyle=\ttfamily\scriptsize,
+  keywordstyle=\color{brand}\bfseries,
+  commentstyle=\color{muted},
+  stringstyle=\color{okgreen},
+  backgroundcolor=\color{codebg},
+  frame=single, framerule=0pt, rulecolor=\color{codebg},
+  framesep=4pt, xleftmargin=4pt, xrightmargin=4pt,
+  aboveskip=4pt, belowskip=4pt,
+  columns=fullflexible, keepspaces=true,
+  showstringspaces=false, upquote=true, breaklines=false,
+  texcl=true,   % 주석을 LaTeX로 조판 → 한글/영문 섞인 주석이 꼬이지 않음 (주석 속 _ ~ 는 escape)
+}
+\lstdefinestyle{sh}{style=py, language=bash, keywordstyle=\color{ink}}
+\lstset{style=py}
+\newcommand{\cc}[1]{\texttt{#1}}
+
+% ---------------- Meta ----------------
+\title{강화학습 실습:\\ Actor-Critic에서 SAC, PPO까지}
+\subtitle{ex01 → ex05, 코드가 한 단계씩 어떻게 바뀌는가}
+\date{2026. 11.}
+
+\begin{document}
+
+% ==================================================
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+% ==================================================
+\section{개요}
+
+\begin{frame}{실습 로드맵}
+  \begin{cmptable}{H{1.3cm}LLLL}
+    \hd{파일} & \hd{환경} & \hd{알고리즘} & \hd{행동 공간} & \hd{데이터 사용} \\
+    \midrule
+    ex01 & Pendulum · CartPole · Grid & Random agent & Box · Discrete · MultiDiscrete & -- \\
+    ex02 & CartPole-v1 & Actor-Critic & Discrete(2) & On-policy \\
+    ex03 & Pendulum-v1 & Actor-Critic & Box(1) & On-policy \\
+    ex04 & Pendulum-v1 & SAC & Box(1) & Off-policy \\
+    ex05 & Pendulum-v1 & PPO & Box(1) & On-policy \\
+    \bottomrule
+  \end{cmptable}
+  \vspace{0.8em}
+  \begin{keybox}
+    ex03 · ex04 · ex05는 \textbf{같은 Pendulum}을 풀기 때문에, 알고리즘 차이를 그대로 비교할 수 있습니다.
+  \end{keybox}
+\end{frame}
+
+\begin{frame}{변화의 흐름}
+  \centering
+  \begin{tikzpicture}[
+      box/.style={draw=brand!45, fill=brand!6, rounded corners=3pt, align=center,
+                  minimum width=2.6cm, minimum height=1.25cm, font=\small, text=ink},
+      hl/.style={box, draw=accent!65, fill=accent!8, minimum width=3.2cm},
+      arr/.style={-{Stealth[length=2.4mm]}, thick, draw=muted},
+      lab/.style={font=\scriptsize, text=ink, align=center},
+    ]
+    \node[box] (e2) at (0,0) {\textbf{ex02}\\Actor-Critic · 이산};
+    \node[box] (e3) at (4.9,0) {\textbf{ex03}\\Actor-Critic · 연속};
+    \node[hl] (e4) at (10.3,1.45) {\textbf{ex04}\\SAC · Off-policy};
+    \node[hl] (e5) at (10.3,-1.45) {\textbf{ex05}\\PPO · On-policy};
+    \draw[arr] (e2) -- node[lab, above=1pt]{이산 → 연속} node[lab, below=1pt]{Categorical\\→ Normal} (e3);
+    \draw[arr] (e3.east) -- (e4.west) node[lab, pos=0.45, above left=0pt and -2pt]{replay buffer\\Q(s,a) · 온도 α};
+    \draw[arr] (e3.east) -- (e5.west) node[lab, pos=0.45, below left=0pt and -2pt]{GAE · ratio clip\\rollout 재사용};
+    \path let \p1 = (e2.west), \p2 = (e4.east) in
+      node[draw=muted!40, fill=codebg, rounded corners=3pt, minimum height=0.8cm,
+           minimum width=\x2-\x1, font=\footnotesize, text=ink, anchor=west] (e1)
+           at (\x1, -2.75)
+           {\textbf{ex01}\quad Gymnasium 인터페이스: \cc{reset()} · \cc{step()} · \cc{terminated} / \cc{truncated} · 행동 공간};
+  \end{tikzpicture}
+\end{frame}
+
+% ==================================================
+\section{ex01 · 환경}
+
+\begin{frame}[fragile]{Agent ↔ Env 인터페이스 (Gymnasium)}
+\begin{lstlisting}
+obs, info = env.reset(seed=0)                                 # 에피소드 시작
+obs, reward, terminated, truncated, info = env.step(action)   # 한 step 진행
+if terminated or truncated:                                   # 끝나면 직접 reset
+    obs, info = env.reset()
+\end{lstlisting}
+  \vspace{0.3em}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.485\textwidth}
+      \begin{keybox}[equal height group=term]
+        \boxtitle{terminated}
+        목표 달성 / 실패로 끝남 (MDP의 terminal state)\\[2pt]
+        → 이후 받을 보상이 없음: \alert{$V(s') = 0$}
+      \end{keybox}
+    \end{column}
+    \begin{column}{0.485\textwidth}
+      \begin{keybox}[equal height group=term]
+        \boxtitle{truncated}
+        시간 제한 등 외부 이유로 끊김 (Pendulum은 200 step)\\[2pt]
+        → 원래는 계속될 상태: \alert{$V(s') \neq 0$}, bootstrap 필요
+      \end{keybox}
+    \end{column}
+  \end{columns}
+  \vspace{0.2em}
+  {\small ex02 – ex05 모두 TD target의 \cc{done}에는 \textbf{terminated만} 사용합니다.}
+\end{frame}
+
+\begin{frame}[fragile]{행동 공간 3가지}
+  \begin{cmptable}{H{4.1cm}LLL}
+    \hd{action\_space} & \hd{환경} & \hd{의미} & \hd{사용} \\
+    \midrule
+    Box(-2, 2, (1,)) & Pendulum-v1 & 연속 토크 값 & ex03 – ex05 \\
+    Discrete(2) & CartPole-v1 & 0: 왼쪽, 1: 오른쪽 & ex02 \\
+    MultiDiscrete([3, 3]) & GridMoveEnv (커스텀) & x, y 이동 \{−1, 0, +1\} 동시 선택 & ex01 \\
+    \bottomrule
+  \end{cmptable}
+  \vspace{0.6em}
+\begin{lstlisting}
+class GridMoveEnv(gym.Env):          # 커스텀 환경 = space 정의 + reset / step 구현
+    def __init__(self, size=5, max_steps=50):
+        self.observation_space = gym.spaces.Box(0, size - 1, shape=(2,),
+                                                dtype=np.int64)
+        self.action_space = gym.spaces.MultiDiscrete([3, 3])
+\end{lstlisting}
+\end{frame}
+
+% ==================================================
+\section{ex02 · Actor-Critic (이산)}
+
+\begin{frame}{Actor-Critic 구성 (CartPole)}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.42\textwidth}
+      \begin{keybox}
+        \boxtitle{Actor \ $\pi(a\,|\,s;\theta)$}
+        state → logits → \cc{Categorical}\\
+        학습 중엔 샘플링, 평가 땐 argmax
+      \end{keybox}
+      \begin{keybox}
+        \boxtitle{Critic \ $V(s; w)$}
+        state → 스칼라 가치\\
+        TD로 학습
+      \end{keybox}
+      {\footnotesize\color{muted} 두 네트워크 모두 64 hidden · Tanh}
+    \end{column}
+    \begin{column}{0.54\textwidth}
+      \vspace{0.2em}
+      TD error (= advantage 추정치)
+      \[ \delta = r + \gamma\, V(s') - V(s) \]
+      Critic loss
+      \[ \mathcal{L}_{\text{critic}} = \delta^2 \]
+      Actor loss \ {\footnotesize\color{muted}($\delta$는 detach)}
+      \[ \mathcal{L}_{\text{actor}} = -\log \pi(a\,|\,s) \cdot \delta \]
+      {\small $\delta > 0$: 예상보다 좋았던 행동 → 확률 ↑}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{On-policy 학습 루프}
+\begin{lstlisting}
+for step in range(total_steps):
+    action = agent.select_action(state)
+    next_state, reward, terminated, truncated, _ = env.step(action)
+    # TD target의 done은 terminated만 사용
+    rollout.append((state, action, reward, next_state, terminated))
+
+    state = next_state
+    if terminated or truncated:
+        state, _ = env.reset()
+
+    if (step + 1) % update_interval == 0:      # 32 step마다
+        agent.update(rollout)                  # Critic → Actor 순서로 한 번씩
+        rollout.clear()                        # On-policy: 쓴 데이터는 버림
+\end{lstlisting}
+  \vspace{0.2em}
+  \begin{itemize}\small
+    \item 수집 → 학습 → \textbf{데이터 비우기}: 정책이 바뀌면 이전 데이터는 ‘남의 정책’ 데이터
+    \item 평가는 별도 \cc{eval\_env}에서 5 에피소드 평균 (학습에는 사용 안 함)
+  \end{itemize}
+\end{frame}
+
+% ==================================================
+\section{ex03 · Actor-Critic (연속)}
+
+\begin{frame}{ex02 → ex03: 바뀌는 것은 Actor 하나}
+  \begin{cmptable}{H{2.6cm}LL}
+    \hd{항목} & \hd{ex02 (CartPole)} & \hd{ex03 (Pendulum)} \\
+    \midrule
+    행동 공간 & Discrete(2) & Box(−2, 2, (1,)) \\
+    정책 분포 & Categorical(logits) & Normal($\mu(s)$, $\sigma^2$) \\
+    Actor 출력 & logits 2개 & $\mu = 2 \cdot \tanh(f(s))$ \\
+    탐색 폭 & 분포 자체 & $\sigma = \exp(\texttt{log\_std})$, state와 무관한 학습 파라미터 \\
+    $\log \pi(a|s)$ & \cc{log\_prob(a)} & $\sum_i \log \mathcal{N}(a_i;\, \mu_i, \sigma_i)$ \\
+    평가 행동 & argmax & 평균 $\mu$ \\
+    $\gamma$ / reward & 0.99 / 그대로 & 0.9 / × 1/8 (Critic 안정화) \\
+    학습 step & 100k & 300k \\
+    \bottomrule
+  \end{cmptable}
+  \vspace{0.4em}
+  {\small Critic, TD 학습, 학습 루프는 \textbf{그대로}입니다.}
+\end{frame}
+
+\begin{frame}[fragile]{Gaussian policy 코드}
+\begin{lstlisting}
+self.log_std = nn.Parameter(torch.zeros(act_dim))        # 탐색 폭도 학습
+
+def dist(self, s):
+    mean = self.act_high * torch.tanh(self.actor_mean(s))  # 평균을 [-2, 2] 안으로
+    return torch.distributions.Normal(mean, self.log_std.exp())
+
+log_prob = self.dist(s).log_prob(a).sum(-1)              # 차원별 log 확률의 합
+actor_loss = -(log_prob * advantage).mean()              # ex02와 같은 식
+\end{lstlisting}
+  \vspace{0.3em}
+  \begin{warnbox}
+    \warntitle{ex03의 한계}
+    \begin{itemize}\small
+      \item 데이터를 \textbf{한 번만} 쓰고 버림 → 300k step이 필요할 만큼 샘플 효율이 낮음
+      \item 1-step $\delta$ 하나로 advantage를 추정 → 학습 신호가 거칠다
+    \end{itemize}
+  \end{warnbox}
+\end{frame}
+
+\begin{frame}{ex03의 한계를 푸는 두 갈래}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.485\textwidth}
+      \begin{keybox}[colback=c04!7,colframe=c04!7,height=5.2cm]
+        \boxtitle{ex04 · SAC \ {\normalfont\small(Off-policy)}}
+        \begin{itemize}\small
+          \item \textbf{과거 데이터까지} replay buffer에 모아 계속 재사용
+          \item 과거 정책의 행동도 평가하려면 → $Q(s,a)$
+          \item $Q$ 과대추정 → Q 두 개 + target 네트워크
+          \item 탐색은 entropy 온도 $\alpha$가 자동 조절
+        \end{itemize}
+      \end{keybox}
+    \end{column}
+    \begin{column}{0.485\textwidth}
+      \begin{keybox}[colback=c05!8,colframe=c05!8,height=5.2cm]
+        \boxtitle{ex05 · PPO \ {\normalfont\small(On-policy)}}
+        \begin{itemize}\small
+          \item \textbf{방금 모은 rollout}을 여러 epoch 재사용
+          \item 재사용하는 동안 정책이 너무 변하지 않게 → ratio clip
+          \item advantage는 GAE($\lambda$)로 더 매끄럽게
+          \item 구조는 ex03과 거의 같음 (V(s), Gaussian)
+        \end{itemize}
+      \end{keybox}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ==================================================
+\section{ex04 · SAC}
+
+\begin{frame}{ex03 → ex04: 무엇이 바뀌었나}
+  \begin{cmptable}{H{2.5cm}LL}
+    \hd{항목} & \hd{ex03 Actor-Critic} & \hd{ex04 SAC} \\
+    \midrule
+    정책 학습 & On-policy & \textbf{Off-policy} \\
+    데이터 & rollout 32개, 쓰고 버림 & replay buffer 100k, 무작위 256개 샘플 \\
+    Critic & $V(s)$ & $Q_1(s,a)$, $Q_2(s,a)$ + target 네트워크 \\
+    Actor loss & $-\log\pi \cdot \delta$ & $\alpha \log\pi(\tilde a|s) - \min_j Q_j(s, \tilde a)$ \\
+    Gradient & score function ($\nabla \log\pi$) & reparameterization (\cc{rsample}) \\
+    탐색 & \cc{log\_std} 파라미터 & $\sigma(s)$ 출력 + 온도 $\alpha$ 자동 조절 \\
+    행동 범위 & $\mu$만 tanh, 범위 밖은 env가 clip & tanh squash + $\log\pi$ 보정 \\
+    업데이트 & 32 step마다 1회 & \textbf{매 step} 1회 \\
+    네트워크 · 학습량 & 64 × 1층 · 300k step & 256 × 2층 · \textbf{20k step} \\
+    \bottomrule
+  \end{cmptable}
+\end{frame}
+
+\begin{frame}[fragile]{Replay Buffer: Off-policy의 출발점}
+\begin{lstlisting}
+def append(self, s, a, r, s2, d):
+    self.s[self.ptr], self.a[self.ptr], self.r[self.ptr] = s, a, r
+    self.s2[self.ptr], self.d[self.ptr] = s2, d
+    self.ptr = (self.ptr + 1) % self.size          # 가득 차면 오래된 것부터 덮어씀
+    self.n = min(self.n + 1, self.size)
+
+def sample(self, batch_size):
+    idx = np.random.randint(0, self.n, size=batch_size)
+    return [torch.as_tensor(x[idx], device=device)
+            for x in (self.s, self.a, self.r, self.s2, self.d)]
+\end{lstlisting}
+  \begin{itemize}\small
+    \item 매 step 1개 저장 → 무작위 256개로 1회 업데이트 (연속된 데이터의 상관관계 ↓)
+    \item 버퍼 속 행동은 \textbf{과거 정책}이 고른 것 → $V(s)$로는 평가 불가, \alert{$Q(s,a)$}가 필요
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Critic: Soft TD target과 Twin Q}
+  \[
+    y = r + \gamma (1-d) \Big( \min_{j=1,2} Q_{\bar\phi_j}(s', a') - \alpha \log \pi_\theta(a'|s') \Big),
+    \qquad a' \sim \pi_\theta(\cdot\,|\,s')
+  \]
+  \[
+    \mathcal{L}_Q = \sum_{j=1,2} \big( Q_{\phi_j}(s,a) - y \big)^2
+  \]
+  \vspace{0.1em}
+  \begin{itemize}\small
+    \item $a'$는 버퍼가 아니라 \textbf{현재 정책}에서 새로 뽑음 → Off-policy가 가능한 이유
+    \item $\min$ of 2 Q: Q가 과대추정되는 것을 막음 (Clipped Double Q)
+    \item $-\alpha\log\pi$: 다음 상태의 entropy까지 가치에 포함 (soft value)
+    \item Target 네트워크는 천천히 따라감: \ $\bar\phi \leftarrow (1-\tau)\,\bar\phi + \tau\,\phi$, \ $\tau = 0.005$
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Actor와 온도 $\alpha$}
+  \[
+    \mathcal{L}_\pi = \mathbb{E}_{s}\Big[ \alpha \log \pi_\theta(\tilde a|s) - \min_{j} Q_{\phi_j}(s, \tilde a) \Big],
+    \quad \tilde a = 2\tanh\!\big(\mu_\theta(s) + \sigma_\theta(s)\,\epsilon\big),\ \ \epsilon \sim \mathcal{N}(0, I)
+  \]
+  \[
+    \mathcal{L}_\alpha = -\,\mathbb{E}\Big[ \log\alpha \cdot \big( \log\pi_\theta(\tilde a|s) + \bar{\mathcal{H}} \big) \Big],
+    \qquad \bar{\mathcal{H}} = -|\mathcal{A}| = -1
+  \]
+  \vspace{0.1em}
+  \begin{itemize}\small
+    \item \cc{rsample()}: $\tilde a$가 $\theta$에 대해 미분 가능 → $\nabla_\theta Q(s,\tilde a)$를 직접 전달
+    \item ex03은 $\nabla\log\pi \cdot \delta$ (score function) → 분산이 큼
+    \item entropy가 목표보다 작으면 (너무 확정적) $\alpha$ ↑, 크면 $\alpha$ ↓ → 탐색량 자동 조절
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{tanh squash와 log 확률 보정}
+  \vspace{-0.8em}
+  \begin{align*}
+    u &\sim \mathcal{N}(\mu, \sigma^2), \qquad a = c \tanh(u), \quad c = 2 \\
+    \log\pi(a|s) &= \sum_i \Big[ \log\mathcal{N}(u_i;\, \mu_i, \sigma_i) - \log c\,\big(1 - \tanh^2 u_i\big) \Big]
+  \end{align*}
+\begin{lstlisting}
+u = mean if evaluation else dist.rsample()       # rsample: u = μ + σ·ε
+action = self.act_high * torch.tanh(u)           # [-2, 2] 범위로 squash
+log_prob = dist.log_prob(u).sum(-1)
+log_prob -= torch.log(self.act_high * (1 - torch.tanh(u).pow(2)) + 1e-6).sum(-1)
+\end{lstlisting}
+  \begin{keybox}
+    \boxtitle{왜 필요한가}
+    \small
+    ex03은 범위 밖 행동을 env가 잘라냄 → 실제 행동과 $\log\pi$ 계산이 어긋남\\
+    SAC는 $\log\pi$가 loss에 직접 들어가므로, squash한 분포의 \textbf{정확한} $\log\pi$가 필요\\
+    변수 변환 $p(a) = p(u)\,|da/du|^{-1}$ → 두 번째 항이 tanh의 기울기 보정
+  \end{keybox}
+\end{frame}
+
+\begin{frame}[fragile]{SAC \cc{update()} (1/2): Critic → Actor}
+\begin{lstlisting}
+# 1) Critic : soft TD target
+with torch.no_grad():
+    a_next, logp_next = self.actor(s_next)                    # a' \textasciitilde{} π(·|s') (현재 정책)
+    q_next = torch.min(self.q1_target(s_next, a_next),
+                       self.q2_target(s_next, a_next))        # 두 Q 중 작은 값
+    td_target = r + gamma * (1 - done) * (q_next - alpha * logp_next)
+q1_loss = (self.q1(s, a) - td_target).pow(2).mean()
+q2_loss = (self.q2(s, a) - td_target).pow(2).mean()
+self.q_opt.zero_grad(); (q1_loss + q2_loss).backward(); self.q_opt.step()
+
+# 2) Actor : maximize  min Q(s, ã) - α log π(ã|s)
+a_new, logp = self.actor(s)                                   # rsample → Q까지 gradient
+q_new = torch.min(self.q1(s, a_new), self.q2(s, a_new))
+actor_loss = (alpha * logp - q_new).mean()
+self.actor_opt.zero_grad(); actor_loss.backward(); self.actor_opt.step()
+\end{lstlisting}
+  {\small Critic을 먼저 갱신 → Actor는 \textbf{갱신된 Q}를 기준으로 학습}
+\end{frame}
+
+\begin{frame}[fragile]{SAC \cc{update()} (2/2): $\alpha$ → Target}
+\begin{lstlisting}
+# 3) α : entropy가 target\_entropy 근처로 유지되게
+alpha_loss = -(self.log_alpha * (logp.detach() + self.target_entropy)).mean()
+self.alpha_opt.zero_grad(); alpha_loss.backward(); self.alpha_opt.step()
+
+# 4) Target network soft update :  θ' ← (1-τ)θ' + τθ
+with torch.no_grad():
+    for net, tgt in ((self.q1, self.q1_target), (self.q2, self.q2_target)):
+        for p, tp in zip(net.parameters(), tgt.parameters()):
+            tp.mul_(1 - tau).add_(tau * p)
+\end{lstlisting}
+  \vspace{0.3em}
+  \begin{itemize}\small
+    \item \cc{alpha = log\_alpha.exp().detach()}: Critic / Actor loss 안에서 $\alpha$는 상수
+    \item Actor의 backward는 Q 네트워크에도 grad를 남김 → 다음 \cc{q\_opt.zero\_grad()}가 지움
+    \item $\alpha$는 \cc{log\_alpha}로 학습 → 항상 양수
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{ex04를 GPU로 옮길 때}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.53\textwidth}
+      \begin{itemize}\small
+        \item \cc{device}: CUDA가 있으면 \cc{"cuda"}, 없으면 \cc{"cpu"}
+        \item 네트워크는 \cc{.to(device)}\\
+              target은 \cc{deepcopy}라 자동으로 GPU
+        \item 텐서 속성 \cc{act\_high}는 \cc{register\_buffer}\\
+              → 그래야 \cc{.to(device)}를 따라감
+        \item leaf 텐서 \cc{log\_alpha}는 만들 때 \cc{device=device}
+        \item 샘플한 batch → GPU\\
+              env에 넣을 행동 → \cc{.cpu().numpy()}
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.44\textwidth}
+      \begin{warnbox}
+        \warntitle{작은 MLP에선 이득이 작다}
+        \small
+        step 1회 약 10 ms, 그중 update 약 8.7 ms\\[3pt]
+        실제 GPU 연산은 1 ms 정도이고, 나머지는 작은 커널 수백 개를 띄우는 CPU 오버헤드\\[3pt]
+        → 큰 네트워크 · 큰 batch · 병렬 env일수록 GPU 이득 ↑
+      \end{warnbox}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ==================================================
+\section{ex05 · PPO}
+
+\begin{frame}{ex03 → ex05: 무엇이 바뀌었나}
+  \begin{cmptable}{H{2.5cm}LL}
+    \hd{항목} & \hd{ex03 Actor-Critic} & \hd{ex05 PPO} \\
+    \midrule
+    Advantage & 1-step $\delta$ & \textbf{GAE}($\lambda = 0.95$) \\
+    rollout 크기 & 32 step & 2048 step \\
+    데이터 사용 & 1회 업데이트 후 버림 & \textbf{10 epoch × minibatch 64} (320회 업데이트) \\
+    Actor loss & $-\log\pi \cdot \delta$ & $-\min\big(\rho \hat A,\ \mathrm{clip}(\rho, 1\pm\epsilon)\,\hat A\big)$ \\
+    Critic target & $r + \gamma V(s')$ & $\hat A + V(s)$ \ (GAE return) \\
+    저장하는 정보 & \cc{terminated} & \cc{terminated} + \cc{truncated} \\
+    안정화 장치 & -- & $\hat A$ 정규화, gradient clip 0.5 \\
+    네트워크 & 64 × 1층 & 64 × 2층 \\
+    \bottomrule
+  \end{cmptable}
+  \vspace{0.4em}
+  {\small \textbf{그대로}: Gaussian policy (state와 무관한 \cc{log\_std}), $\gamma = 0.9$, reward × 1/8, On-policy}
+\end{frame}
+
+\begin{frame}[fragile]{GAE: 여러 step의 $\delta$를 $\lambda$로 섞기}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.5\textwidth}
+      \[ \delta_t = r_t + \gamma (1 - \text{term}_t)\, V(s_{t+1}) - V(s_t) \]
+      \[ \hat A_t = \delta_t + \gamma\lambda\, (1 - \text{end}_t)\, \hat A_{t+1} \]
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{itemize}\small
+        \item $\lambda = 0$ → $\hat A_t = \delta_t$ (ex03과 같음)
+        \item $\lambda = 1$ → Monte-Carlo return
+        \item \cc{term}: bootstrap을 끊음 ($V(s')=0$)
+        \item \cc{end} = term $\lor$ trunc: 누적을 끊음
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \vspace{0.8em}
+\begin{lstlisting}
+delta = r + gamma * (1 - terminated) * v_next - v
+adv = torch.zeros_like(delta)
+gae = 0.0
+for t in reversed(range(len(delta))):                     # 뒤에서부터 누적
+    gae = delta[t] + gamma * gae_lambda * (1 - episode_end[t]) * gae
+    adv[t] = gae
+returns = adv + v                                         # Critic의 target
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}{Clipped surrogate: 재사용해도 정책이 멀어지지 않게}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.57\textwidth}
+      \[ \rho_t = \frac{\pi_\theta(a_t|s_t)}{\pi_{\text{old}}(a_t|s_t)} \]
+      \[ \mathcal{L} = -\,\mathbb{E}_t\Big[ \min\big( \rho_t \hat A_t,\ \mathrm{clip}(\rho_t, 1{-}\epsilon, 1{+}\epsilon)\, \hat A_t \big) \Big] \]
+      \begin{itemize}\small
+        \item 같은 데이터로 여러 번 업데이트 → 정책이 rollout 때와 달라짐 → ratio $\rho$로 보정
+        \item $\epsilon = 0.2$: $\rho$가 범위를 벗어나면 gradient 0
+        \item $\pi_{\text{old}}$: update 시작 때 \cc{no\_grad}로 한 번 계산
+        \item \cc{clip\_frac}: clip에 걸린 샘플 비율 (모니터링용)
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.4\textwidth}
+      \centering
+      \begin{tikzpicture}
+        \begin{axis}[
+            name=pos, width=5.2cm, height=3.0cm, xmin=0.4, xmax=1.6, ymin=0.3, ymax=1.5,
+            axis lines=left, xtick={0.8,1,1.2}, xticklabels={}, ytick=\empty,
+            title={\scriptsize $\hat A > 0$},
+            title style={yshift=-6pt}, clip=false]
+          \addplot[very thick, c04, domain=0.4:1.2] {x};
+          \addplot[very thick, c04, domain=1.2:1.6] {1.2};
+          \addplot[densely dashed, muted, domain=1.2:1.6] {x};
+          \node[font=\tiny, text=muted, anchor=west] at (axis cs:1.22,1.0) {이득 상한};
+        \end{axis}
+        \begin{axis}[
+            at={(pos.south west)}, anchor=north west, yshift=-0.45cm,
+            width=5.2cm, height=3.0cm, xmin=0.4, xmax=1.6, ymin=-1.5, ymax=-0.3,
+            axis lines=left, xtick={0.8,1,1.2}, ytick=\empty,
+            xticklabel style={font=\tiny}, title={\scriptsize $\hat A < 0$},
+            title style={yshift=-6pt}, xlabel={\scriptsize $\rho$},
+            xlabel style={at={(axis description cs:1.02,0)}, anchor=west}, clip=false]
+          \addplot[very thick, c05, domain=0.4:0.8] {-0.8};
+          \addplot[very thick, c05, domain=0.8:1.6] {-x};
+          \addplot[densely dashed, muted, domain=0.4:0.8] {-x};
+        \end{axis}
+      \end{tikzpicture}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{PPO \cc{update()}: K epoch × minibatch}
+\begin{lstlisting}
+with torch.no_grad():                                     # rollout 시점 값 (학습 중 고정)
+    old_log_prob = self.dist(s).log_prob(a).sum(-1)       # π\_old = rollout을 모은 정책
+    v, v_next = self.value(s), self.value(s_next)
+    advantage = self.compute_gae(r, v, v_next, terminated, episode_end)
+    returns = advantage + v
+for epoch in range(num_epochs):                           # 10 epoch
+    for idx in torch.randperm(len(s)).split(minibatch_size):  # 64개씩
+        adv = advantage[idx]
+        adv = (adv - adv.mean()) / (adv.std() + 1e-8)     # minibatch 단위 정규화
+        d = self.dist(s[idx])
+        ratio = (d.log_prob(a[idx]).sum(-1) - old_log_prob[idx]).exp()
+        surr1 = ratio * adv
+        surr2 = ratio.clamp(1 - clip_eps, 1 + clip_eps) * adv
+        actor_loss = -torch.min(surr1, surr2).mean()
+        critic_loss = (self.value(s[idx]) - returns[idx]).pow(2).mean()
+        # 각각 zero\_grad → backward → clip\_grad\_norm\_(0.5) → step
+\end{lstlisting}
+\end{frame}
+
+% ==================================================
+\section{결과}
+
+\begin{frame}{Pendulum 학습 곡선: ex03 · ex04 · ex05}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.64\textwidth}
+      \begin{tikzpicture}
+        \begin{axis}[
+            width=0.93\linewidth, height=5.9cm,
+            xmin=0, xmax=300, ymin=-1650, ymax=0,
+            xlabel={\footnotesize 환경 step (×1000)}, ylabel={\footnotesize eval return},
+            ticklabel style={font=\scriptsize}, axis lines=left,
+            grid=major, grid style={draw=muted!15},
+            legend style={font=\scriptsize, draw=none, fill=white, fill opacity=0.85, text opacity=1,
+                          at={(0.98,0.04)}, anchor=south east, row sep=-1pt},
+            legend cell align=left, clip=false]
+          \addplot[thick, c03, mark=none] coordinates {(0,-1409.3) (10,-1580.4) (20,-1598) (30,-1566.8) (40,-1631.4) (50,-1529.9) (60,-1206.8) (70,-1218.3) (80,-976.9) (90,-708.9) (100,-764.5) (110,-675.9) (120,-188.7) (130,-335.2) (140,-159.7) (150,-323.6) (160,-345.8) (170,-308.2) (180,-388.1) (190,-274.8) (200,-202) (210,-388.1) (220,-240.7) (230,-147.9) (240,-298.1) (250,-104.3) (260,-191.5) (270,-308.3) (280,-276.8) (290,-221.3) (300,-364.7)};
+          \addplot[thick, c04, mark=*, mark size=1pt] coordinates {(0,-1337.3) (2,-1082.7) (4,-246.6) (6,-143.7) (8,-97) (10,-140.1) (12,-97.7) (14,-170.7) (16,-168) (18,-144.7) (20,-143)};
+          \addplot[thick, c05, mark=none] coordinates {(0,-1124.8) (10,-1151.3) (20,-910.5) (30,-291.3) (40,-102) (50,-182.2) (60,-131.5) (70,-267.6) (80,-250.7) (90,-166.2) (100,-188.8) (110,-175.2) (120,-128.3) (130,-166.5) (140,-104.1) (150,-132.8) (160,-170.8) (170,-214.7) (180,-166.5) (190,-183.2) (200,-103.5) (210,-280.4) (220,-155.8) (230,-106.2) (240,-231.5) (250,-105.9) (260,-161) (270,-212.1) (280,-235.3) (290,-214.2) (300,-318.1)};
+          \legend{ex03 Actor-Critic, ex04 SAC (20k에서 종료), ex05 PPO}
+        \end{axis}
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{0.33\textwidth}
+      \footnotesize
+      \textbf{return이 처음 −300 이상}\par\smallskip
+      \renewcommand{\arraystretch}{1.25}
+      \begin{tabular}{@{}l r@{}}
+        {\color{c04}\textbf{SAC}} & \textbf{4k step} \\
+        {\color{c05}\textbf{PPO}} & 30k step \\
+        {\color{c03}\textbf{AC}} & 120k step \\
+      \end{tabular}
+      \par\bigskip
+      \textbf{마지막 3회 평가 평균}\par\smallskip
+      \begin{tabular}{@{}l r@{}}
+        {\color{c04}\textbf{SAC}} & −152 \\
+        {\color{c05}\textbf{PPO}} & −256 \\
+        {\color{c03}\textbf{AC}} & −288 \\
+      \end{tabular}
+      \par\bigskip
+      {\scriptsize\color{muted} Pendulum은 0이 최고점,\\ 보통 −200 안쪽이면 세워서 유지}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{결과 요약}
+  \setlength{\tabcolsep}{4pt}
+  \begin{cmptable}{H{1.9cm}P{1.8cm}P{1.6cm}R{1.15cm}R{1.15cm}R{1.15cm}L}
+    \hd{파일} & \hd{환경} & \hd{학습량} & \hd{학습 전} & \hd{최종} & \hd{최고} & \hd{소요 시간} \\
+    \midrule
+    ex02 AC & CartPole & 100k step & 9.8 & 142.8 & 215.8 & 9분 16초 (CPU) \\
+    ex03 AC & Pendulum & 300k step & −1409 & −365 & −104 & 12분 23초 (CPU) \\
+    ex04 SAC & Pendulum & \textbf{20k step} & −1337 & −143 & −97 & 3분 41초 (GPU) \\
+    ex05 PPO & Pendulum & 300k step & −1125 & −318 & −102 & 5분 42초 (GPU) \\
+    \bottomrule
+  \end{cmptable}
+  \vspace{0.6em}
+  \begin{itemize}\small
+    \item SAC는 \textbf{15배 적은 step}으로 가장 좋은 최종 성능 → replay buffer 재사용의 효과
+    \item PPO는 같은 300k step 예산에서 ex03보다 4배 빨리 −300에 도달 (30k vs 120k step)
+    \item ex02 CartPole은 아직 만점(500)에 못 미침 → 1-step Actor-Critic의 한계
+  \end{itemize}
+  \vspace{0.2em}
+  {\scriptsize\color{muted} eval return = 별도 env에서 5 에피소드 평균 · seed 0으로 한 번 실행한 결과 · 공용 서버에서 동시에 돌려 시간은 참고용}
+\end{frame}
+
+% ==================================================
+\section{정리}
+
+\begin{frame}{세 알고리즘 한눈에}
+  \begin{cmptable}[1.22]{H{2.6cm}LLL}
+    \hd{항목} & \hd{ex03 Actor-Critic} & \hd{ex04 SAC} & \hd{ex05 PPO} \\
+    \midrule
+    정책 학습 & On-policy & Off-policy & On-policy \\
+    데이터 재사용 & 없음 (1회) & replay buffer 전체 & 최근 rollout만 10 epoch \\
+    Critic & $V(s)$, 1-step TD & $Q_1, Q_2$ + target & $V(s)$, GAE return \\
+    정책 변화 제어 & 없음 & entropy 온도 $\alpha$ & ratio clip $\epsilon$ \\
+    업데이트 빈도 & 32 step마다 1회 & 매 step 1회 & 2048 step마다 320회 \\
+    샘플 효율 & 낮음 & \textbf{높음} & 중간 \\
+    주요 설정값 & lr, $\gamma$ & $\tau$, batch, buffer & $\epsilon$, $\lambda$, epoch, minibatch \\
+    \bottomrule
+  \end{cmptable}
+  \vspace{0.2em}
+  \begin{keybox}[top=3pt,bottom=3pt]
+    같은 Actor-Critic 뼈대에서 \textbf{“데이터를 어떻게 재사용하느냐”}가 SAC와 PPO를 가릅니다.
+  \end{keybox}
+\end{frame}
+
+\begin{frame}[fragile]{실행 방법}
+\begin{lstlisting}[style=sh]
+pip install gymnasium torch tqdm
+
+python ex01_agent_env.py                      # 환경 3종 랜덤 상호작용 출력
+python ex02_basic_actorcritic_discrete.py     # CartPole, CPU
+python ex03_basic_actorcritic_contiuous.py    # Pendulum, CPU
+CUDA_VISIBLE_DEVICES=1 python ex04_sac.py     # 사용할 GPU 번호 지정
+python ex05_ppo.py                            # GPU가 있으면 자동 사용
+\end{lstlisting}
+  \vspace{0.3em}
+  \begin{itemize}\small
+    \item ex02 – ex05는 tqdm 진행바에 \textbf{step/s}가 표시되고, 평가 로그는 진행바 위에 출력
+    \item 평가: \cc{eval\_interval}마다 별도 \cc{eval\_env}에서 5 에피소드 평균 return
+  \end{itemize}
+\end{frame}
+
+\end{document}
