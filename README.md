@@ -178,7 +178,22 @@ output path. Bare spec filenames are loaded from `analog_sizing/gen_specs/`;
 other relative configuration and output paths are resolved from the repository
 root. Built-in evaluation data is preserved separately from newly generated data.
 
-## Layout
+## Practice examples and automatic layout
+
+`ex01`–`ex05` introduce actor-critic, SAC, and PPO on Gymnasium tasks. `ex06`–`ex08`
+apply SAC to the SKY130 LDO from start to finish:
+
+```bash
+python ex06_ldo_tt_sac.py              # TT corner only, then check the design on 9 PVT corners
+python ex07_ldo_pvt_sac.py             # 9 PVT corners with estimated layout parasitics
+python ex08_ldo_layout_postlayout.py   # ALIGN layout, extraction, post-layout PVT check
+```
+
+`ex08` and `layout/run_ldo_layout.sh` need ALIGN. Installation, expected output, and
+the example specification are described in [docs/MANUAL.md](docs/MANUAL.md)
+(sections 8 and 9).
+
+## Repository layout
 
 ```text
 analog_sizing/
@@ -193,6 +208,9 @@ eval_engines/
   pdk/                 # GF180 and SKY130 models
 scripts/               # Circuit launchers and random-rollout example
 tests/                 # Environment and simulation-wrapper regression checks
+layout/                # ALIGN layout and post-layout scripts for the LDO
+ex01_*.py ... ex08_*.py  # Practice examples (ex_ldo_common.py is shared by ex06-ex08)
+docs/MANUAL.md         # Step-by-step manual (Korean)
 ```
 
 Run the regression tests with `python -m pytest -q tests` after installing `pytest`

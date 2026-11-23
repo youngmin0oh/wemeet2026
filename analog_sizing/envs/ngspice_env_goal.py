@@ -168,7 +168,7 @@ class ngspice_env_goal(ngspice_env_cont):
             f = math.tanh(1.0 / scale)
             x = torch.clamp(norm_spec * f, -0.999, 0.999)
             atanh_x = 0.5 * (torch.log1p(x) - torch.log1p(-x))
-            return goal_spec * (1.0 + scale * atanh_x)
+            return goal_spec + goal_spec.abs() * scale * atanh_x
 
         else:
             raise ValueError(f"Unknown lookup_style {self.lookup_style!r}")
@@ -185,14 +185,14 @@ class ngspice_env_goal(ngspice_env_cont):
         if self.lookup_style == "normd":
             delta = spec - goal_safe
             abs_delta = delta.abs() + epsilon
-            denom = goal_safe + spec.abs() + epsilon
+            denom = goal_safe.abs() + spec.abs() + epsilon
             rel_specs = torch.sign(delta) * torch.exp(
                 torch.log(abs_delta) - torch.log(denom)
             )
 
         elif self.lookup_style == "tanh":
             scale = getattr(self, "scale_factor", 10.0)
-            raw = (spec - goal_safe) / (scale * goal_safe)
+            raw = (spec - goal_safe) / (scale * goal_safe.abs())
             rel_specs = torch.tanh(raw) / math.tanh(1.0 / scale)
 
         else:
@@ -206,8 +206,8 @@ class ngspice_env_goal(ngspice_env_cont):
                 adj[i] = -1.0
         adjusted = rel_specs * adj.unsqueeze(0)
 
-        # --- Sign-mismatch penalty ---
-        sign_mismatch = (spec < 0.0) != (goal < 0.0)
+        # --- Sign-mismatch penalty: a negative value against a non-negative goal ---
+        sign_mismatch = (spec < 0.0) & (goal >= 0.0)
         adjusted = torch.where(sign_mismatch, torch.full_like(adjusted, -1.0), adjusted)
 
         negative_mask = adjusted < 0.0

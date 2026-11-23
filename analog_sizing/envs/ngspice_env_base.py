@@ -369,13 +369,14 @@ class ngspice_env(gymnasium.Env, ABC):
         if self.lookup_style == "normd":
             delta = spec - goal_spec
             abs_delta = np.abs(delta) + epsilon  # Avoid log(0)
-            denom = goal_spec + np.abs(spec) + epsilon  # Avoid log(0)
+            # |goal| keeps the sign of the comparison right for negative goals.
+            denom = np.abs(goal_spec) + np.abs(spec) + epsilon  # Avoid log(0)
             norm_spec = np.sign(delta) * np.exp(np.log(abs_delta) - np.log(denom))
 
         elif self.lookup_style == "tanh":
             scale_factor = 10.0
             norm_spec = np.tanh(
-                (spec - goal_spec) / (scale_factor * goal_spec)
+                (spec - goal_spec) / (scale_factor * np.abs(goal_spec))
             ) / np.tanh(1 / scale_factor)
         else:
             raise ValueError(f"Unknown lookup_style {self.lookup_style!r}")
@@ -387,7 +388,7 @@ class ngspice_env(gymnasium.Env, ABC):
         elif self.lookup_style == "tanh":
             scale_factor = 10.0
             x = np.clip(norm_spec * np.tanh(1 / scale_factor), -0.999, 0.999)
-            spec = goal_spec * (1 + scale_factor * np.arctanh(x))
+            spec = goal_spec + np.abs(goal_spec) * scale_factor * np.arctanh(x)
         else:
             raise ValueError(f"Unknown lookup_style {self.lookup_style!r}")
         return spec

@@ -117,6 +117,25 @@ def test_tt_only_hindsight_reward_matches_step_reward(circuit, nominal):
     np.testing.assert_allclose(relabeled, [reward], rtol=1e-4)
 
 
+@pytest.mark.parametrize("style", ["tanh", "normd"])
+def test_negative_goals_keep_the_inequality_direction(circuit, style):
+    config, _ = circuit
+    env = ngspice_env_goal({**config, "lookup_style": style})
+    goal = np.array([-3.0, -3.0])                 # gain_min >= -3, power_max <= -3
+    assert env.aggregate(np.array([0.5, -4.0]), goal) == 10.0
+    assert env.aggregate(np.array([-4.0, 0.5]), goal) < -0.02
+    import torch
+    rewards = env.reward_batch(
+        torch.tensor([[0.5, -4.0], [-4.0, 0.5]]), torch.tensor([[-3.0, -3.0]] * 2)
+    )
+    assert rewards[0] == 10.0 and rewards[1] < -0.02
+    if style == "tanh":
+        norm = env.lookup(np.array([0.5, -4.0]), goal)
+        np.testing.assert_allclose(
+            ngspice_env_base.ngspice_env.unlookup(env, norm, goal), [0.5, -4.0], rtol=1e-4
+        )
+
+
 @pytest.mark.parametrize("env_type", [ngspice_env_cont, ngspice_env_disc])
 def test_seeded_reset_and_framework_contract(circuit, env_type):
     config, _ = circuit

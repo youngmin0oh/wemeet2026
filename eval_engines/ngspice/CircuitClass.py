@@ -201,93 +201,95 @@ class CircuitClass(NgSpiceWrapper):
                 delay=delay
             )
         elif self.ldo:
-            self.Vdd=2.0
-            self.PSRR_1kHz = 1e3 #  from DC to 1kHz
-            self.PSRR_10kHz=1e4
-            self.PSRR_1MHz=1e6
-            self.dc_results = ldo_dc(output_path=output_path, file_name='ldo_tb_dc.txt') #todo
-            idx = int(self.Vdd/0.01 - 1/0.01) # since I sweep Vdc from 1V - 3V to avoid some bad DC points 
-            self.Vdrop =  abs(self.Vdd - self.dc_results[1][idx])
+            # run() parses the corners in parallel threads on this one object, so keep every
+            # intermediate value local; instance attributes were overwritten between corners.
+            Vdd=2.0
+            PSRR_1kHz = 1e3 #  from DC to 1kHz
+            PSRR_10kHz=1e4
+            PSRR_1MHz=1e6
+            dc_results = ldo_dc(output_path=output_path, file_name='ldo_tb_dc.txt') #todo
+            idx = int(Vdd/0.01 - 1/0.01) # since I sweep Vdc from 1V - 3V to avoid some bad DC points 
+            Vdrop =  abs(Vdd - dc_results[1][idx])
             
-            # _, self.load_reg = ldo_tran(output_path=output_path, file_name='ldo_tb_load_reg.txt')
-            # idx_1 = int(len(self.load_reg)/4)
-            # idx_2 = len(self.load_reg) - 1
-            # self.Vload_reg_delta = abs(self.load_reg[idx_2] - self.load_reg[idx_1])
+            # _, load_reg = ldo_tran(output_path=output_path, file_name='ldo_tb_load_reg.txt')
+            # idx_1 = int(len(load_reg)/4)
+            # idx_2 = len(load_reg) - 1
+            # Vload_reg_delta = abs(load_reg[idx_2] - load_reg[idx_1])
             
-            self.psrr_results_maxload = ldo_ac(output_path=output_path, file_name='ldo_tb_psrr_maxload.txt')
-            freq = self.psrr_results_maxload[0]
+            psrr_results_maxload = ldo_ac(output_path=output_path, file_name='ldo_tb_psrr_maxload.txt')
+            freq = psrr_results_maxload[0]
             # @ 10 kHz
-            idx_10kHz = int(10 * np.log10(self.PSRR_10kHz))
+            idx_10kHz = int(10 * np.log10(PSRR_10kHz))
             # @ 1 MHz
-            idx_1MHz = int(10 * np.log10(self.PSRR_1MHz))
-            self.PSRR_maxload_worst_10kHz = max(self.psrr_results_maxload[1][:idx_10kHz]) # in linear scale
-            self.PSRR_maxload_worst_1MHz = max(self.psrr_results_maxload[1][:idx_1MHz]) # in linear scale
-            self.PSRR_maxload_worst_above_1MHz = max(self.psrr_results_maxload[1][idx_1MHz:]) # in linear scale
+            idx_1MHz = int(10 * np.log10(PSRR_1MHz))
+            PSRR_maxload_worst_10kHz = max(psrr_results_maxload[1][:idx_10kHz]) # in linear scale
+            PSRR_maxload_worst_1MHz = max(psrr_results_maxload[1][:idx_1MHz]) # in linear scale
+            PSRR_maxload_worst_above_1MHz = max(psrr_results_maxload[1][idx_1MHz:]) # in linear scale
         
             ''' PSRR performance at min load current '''
-            self.psrr_results_minload = ldo_ac(output_path=output_path, file_name='ldo_tb_psrr_minload.txt')
-            freq = self.psrr_results_minload[0]
+            psrr_results_minload = ldo_ac(output_path=output_path, file_name='ldo_tb_psrr_minload.txt')
+            freq = psrr_results_minload[0]
 
             # @ 10 kHz
-            idx_10kHz = int(10 * np.log10(self.PSRR_10kHz))
+            idx_10kHz = int(10 * np.log10(PSRR_10kHz))
             # @ 1 MHz
-            idx_1MHz = int(10 * np.log10(self.PSRR_1MHz))
-            self.PSRR_minload_worst_10kHz = max(self.psrr_results_minload[1][:idx_10kHz]) # in linear scale
-            self.PSRR_minload_worst_1MHz = max(self.psrr_results_minload[1][:idx_1MHz]) # in linear scale
-            self.PSRR_minload_worst_above_1MHz = max(self.psrr_results_minload[1][idx_1MHz:]) # in linear scale
+            idx_1MHz = int(10 * np.log10(PSRR_1MHz))
+            PSRR_minload_worst_10kHz = max(psrr_results_minload[1][:idx_10kHz]) # in linear scale
+            PSRR_minload_worst_1MHz = max(psrr_results_minload[1][:idx_1MHz]) # in linear scale
+            PSRR_minload_worst_above_1MHz = max(psrr_results_minload[1][idx_1MHz:]) # in linear scale
     
             
             ''' Loop-gain phase margin at max load current'''
-            self.loop_gain_results_maxload = ldo_ac(output_path=output_path, file_name='ldo_tb_loop_gain_maxload.txt')
-            freq = self.loop_gain_results_maxload[0]
-            self.loop_gain_mag_maxload = 20*np.log10(self.loop_gain_results_maxload[1])
-            self.loop_gain_phase_maxload = self.loop_gain_results_maxload[2] # in degree
-            if self.loop_gain_mag_maxload[0] < 0: # if DC gain is smaller than 0 dB
-                self.phase_margin_maxload = 0 # phase margin becomes meaningless 
+            loop_gain_results_maxload = ldo_ac(output_path=output_path, file_name='ldo_tb_loop_gain_maxload.txt')
+            freq = loop_gain_results_maxload[0]
+            loop_gain_mag_maxload = 20*np.log10(loop_gain_results_maxload[1])
+            loop_gain_phase_maxload = loop_gain_results_maxload[2] # in degree
+            if loop_gain_mag_maxload[0] < 0: # if DC gain is smaller than 0 dB
+                phase_margin_maxload = 0 # phase margin becomes meaningless 
             else:  
                 try:
-                    idx = [i for i,j in enumerate(self.loop_gain_mag_maxload[:-1] * self.loop_gain_mag_maxload[1:]) if j<0][0]+1 
-                    phase_margin_maxload = np.min(self.loop_gain_phase_maxload[:idx]) + 180
+                    idx = [i for i,j in enumerate(loop_gain_mag_maxload[:-1] * loop_gain_mag_maxload[1:]) if j<0][0]+1 
+                    phase_margin_maxload = np.min(loop_gain_phase_maxload[:idx]) + 180
                 except: # this rarely happens: unity gain is larger than the frequency sweep
-                    idx = len(self.loop_gain_phase_maxload)
-                    phase_margin_maxload = np.min(self.loop_gain_phase_maxload[:idx]) + 180
+                    idx = len(loop_gain_phase_maxload)
+                    phase_margin_maxload = np.min(loop_gain_phase_maxload[:idx]) + 180
                 if phase_margin_maxload > 180 or phase_margin_maxload < 0:
-                    self.phase_margin_maxload = 0
+                    phase_margin_maxload = 0
                 else:
-                    self.phase_margin_maxload = phase_margin_maxload
+                    phase_margin_maxload = phase_margin_maxload
             
             ''' Loop-gain phase margin at min load current'''
-            self.loop_gain_results_minload = ldo_ac(output_path=output_path, file_name='ldo_tb_loop_gain_minload.txt')
-            freq = self.loop_gain_results_minload[0]
-            self.loop_gain_mag_minload = 20*np.log10(self.loop_gain_results_minload[1])
-            self.loop_gain_phase_minload = self.loop_gain_results_minload[2] # in degree
-            if self.loop_gain_mag_minload[0] < 0: # if DC gain is smaller than 0 dB
-                self.phase_margin_minload = 0 # phase margin becomes meaningless 
+            loop_gain_results_minload = ldo_ac(output_path=output_path, file_name='ldo_tb_loop_gain_minload.txt')
+            freq = loop_gain_results_minload[0]
+            loop_gain_mag_minload = 20*np.log10(loop_gain_results_minload[1])
+            loop_gain_phase_minload = loop_gain_results_minload[2] # in degree
+            if loop_gain_mag_minload[0] < 0: # if DC gain is smaller than 0 dB
+                phase_margin_minload = 0 # phase margin becomes meaningless 
             else:  
                 try:
-                    idx = [i for i,j in enumerate(self.loop_gain_mag_minload[:-1] * self.loop_gain_mag_minload[1:]) if j<0][0]+1 
-                    phase_margin_minload = np.min(self.loop_gain_phase_minload[:idx]) + 180
+                    idx = [i for i,j in enumerate(loop_gain_mag_minload[:-1] * loop_gain_mag_minload[1:]) if j<0][0]+1 
+                    phase_margin_minload = np.min(loop_gain_phase_minload[:idx]) + 180
                 except: # this rarely happens: unity gain is larger than the frequency sweep
-                    idx = len(self.loop_gain_phase_minload)
-                    phase_margin_minload = np.min(self.loop_gain_phase_minload[:idx]) + 180
+                    idx = len(loop_gain_phase_minload)
+                    phase_margin_minload = np.min(loop_gain_phase_minload[:idx]) + 180
                 if phase_margin_minload > 180 or phase_margin_minload < 0:
-                    self.phase_margin_minload = 0
+                    phase_margin_minload = 0
                 else:
-                    self.phase_margin_minload = phase_margin_minload
+                    phase_margin_minload = phase_margin_minload
             # pdb.set_trace()
             return {
-            'Vdrop': self.Vdrop*1e3,
-            # 'Vload_reg_delta': self.Vload_reg_delta*1e3,
-            'mPSRR_maxload_worst_10kHz': -20*np.log10(self.PSRR_maxload_worst_10kHz),
-            'mPSRR_maxload_worst_1MHz': -20*np.log10(self.PSRR_maxload_worst_1MHz),
-            'mPSRR_maxload_worst_above_1MHz': -20*np.log10(self.PSRR_maxload_worst_above_1MHz),
+            'Vdrop': Vdrop*1e3,
+            # 'Vload_reg_delta': Vload_reg_delta*1e3,
+            'mPSRR_maxload_worst_10kHz': -20*np.log10(PSRR_maxload_worst_10kHz),
+            'mPSRR_maxload_worst_1MHz': -20*np.log10(PSRR_maxload_worst_1MHz),
+            'mPSRR_maxload_worst_above_1MHz': -20*np.log10(PSRR_maxload_worst_above_1MHz),
             
-            'mPSRR_minload_worst_10kHz': -20*np.log10(self.PSRR_minload_worst_10kHz),
-            'mPSRR_minload_worst_1MHz': -20*np.log10(self.PSRR_minload_worst_1MHz),
-            'mPSRR_minload_worst_above_1MHz': -20*np.log10(self.PSRR_minload_worst_above_1MHz),
+            'mPSRR_minload_worst_10kHz': -20*np.log10(PSRR_minload_worst_10kHz),
+            'mPSRR_minload_worst_1MHz': -20*np.log10(PSRR_minload_worst_1MHz),
+            'mPSRR_minload_worst_above_1MHz': -20*np.log10(PSRR_minload_worst_above_1MHz),
             
-            'phm_maxload': self.phase_margin_maxload, 
-            'phm_minload': self.phase_margin_minload
+            'phm_maxload': phase_margin_maxload, 
+            'phm_minload': phase_margin_minload
             }
             
         else:
