@@ -3,149 +3,64 @@
 import os
 
 import numpy as np
-import torch
-import torch.nn.functional as F
 from stable_baselines3.common.callbacks import BaseCallback
 
 
 class TrainingCallback(BaseCallback):
-    def __init__(
-        self,
-        num_corners,
-        env,
-        verbose=0,
-        obj_style="softmax",
-        temp=10.0,
-        pareto_freq=0,
-    ):
+    """Count circuit simulations and log them with the training metrics.
+
+    A TT-only step simulates one netlist. With Skip-on-Fail (SoF), a step that
+    fails at TT simulates one netlist and a step that passes simulates every corner.
+    """
+
+    def __init__(self, env, verbose=0):
         super().__init__(verbose)
-        self.tt_sim = 0
-        self.full_sim = 0
-        self.total_sim = 0
-        self.num_corners = num_corners
-        self.env = env
-        self.obs, _ = env.reset()
+        self.num_corners = env.num_corners
         self.SoF = env.SoF
         self.tt_only = getattr(env, "tt_only", False)
-        self.done_in_goal = getattr(env, "done_in_goal", False)
-        self.obj_style = obj_style
-        self.temp = temp
-        self.pareto_freq = pareto_freq
+        self.tt_sim = self.full_sim = self.total_sim = 0
 
     def _on_step(self) -> bool:
-        if self.tt_only:
-            self.total_sim += 1
+        info = self.locals["infos"][0]
+        if self.tt_only or (self.SoF and not info.get("tt_done")):
             self.tt_sim += 1
-        elif self.SoF:
-            if self.locals["infos"][0].get("tt_done"):
-                self.total_sim += self.num_corners
-                self.full_sim += 1
-            else:
-                self.total_sim += 1
-                self.tt_sim += 1
+            self.total_sim += 1
         else:
-            self.total_sim += self.num_corners
             self.full_sim += 1
-        ep_corner_norm_std = self.locals["infos"][0].get("ep_corner_norm_std", 1.0)
-        pareto_buffer_size = self.locals["infos"][0].get("pareto_buffer_size", 0)
+            self.total_sim += self.num_corners
         for key, value in {
             "simulation/tt_sim": self.tt_sim,
             "simulation/full_sim": self.full_sim,
             "simulation/total_sim": self.total_sim,
-            "simulation/corner_norm_std": ep_corner_norm_std,
-            "goals/pareto_buffer_size": pareto_buffer_size,
+            "simulation/corner_norm_std": info.get("ep_corner_norm_std", 1.0),
         }.items():
             self.logger.record(key, value)
-
-        # Pareto Dominant Goal Sampling
-        if self.pareto_freq > 0:
-            if self.locals["infos"][0].get("done") or self.locals["infos"][0].get(
-                "truncated"
-            ):
-                obs = self.obs
-                obs_tensor_dict = {}
-                goals_norm = self.env.get_goals_norm()
-                goals_norm_tensor = torch.tensor(
-                    goals_norm, dtype=torch.float32, device="cpu"
-                )
-                num_goals = goals_norm_tensor.shape[0]
-                if self.done_in_goal:
-                    done_padding = torch.ones(num_goals, 2, device="cpu")
-                    goals_norm_tensor = torch.cat(
-                        [goals_norm_tensor, done_padding], dim=1
-                    )
-
-                for key, value in obs.items():
-                    value_tensor = torch.tensor(
-                        value, dtype=torch.float32, device="cpu"
-                    ).unsqueeze(0)
-                    value_tensor = value_tensor.repeat(num_goals, 1)
-                    obs_tensor_dict[key] = value_tensor
-                obs_tensor_dict["desired_goal"] = goals_norm_tensor
-
-                with torch.no_grad():
-                    action_batch = self.model.predict(
-                        obs_tensor_dict, deterministic=False
-                    )[0]
-                    action_batch = torch.tensor(
-                        action_batch, dtype=torch.float32, device=self.model.device
-                    )
-                    obs_tensor_dict = {
-                        key: value.to(self.model.device)
-                        for key, value in obs_tensor_dict.items()
-                    }
-                    q1_batch, q2_batch = self.model.critic(
-                        obs_tensor_dict, action_batch
-                    )
-
-                    if self.obj_style == "max":
-                        mean_vals = (-(q1_batch + q2_batch) / 2).squeeze()
-                        sampled_goal_idx = mean_vals.argmax().cpu().item()
-
-                    elif self.obj_style == "softmax":
-                        mean_vals = (-(q1_batch + q2_batch) / 2).squeeze()
-                        probs = F.softmax(mean_vals / self.temp, dim=-1)
-                        dist = torch.distributions.Categorical(probs)
-                        sampled_goal_idx = dist.sample().cpu().item()
-
-                    else:  # random sampling
-                        sampled_goal_idx = 0
-
-                self.env.set_goal_idx(sampled_goal_idx)
         return True
 
     def _on_training_start(self) -> None:
-        self.tt_sim = 0
-        self.full_sim = 0
-        self.total_sim = 0
+        self.tt_sim = self.full_sim = self.total_sim = 0
 
     def _on_training_end(self) -> None:
         self.logger.dump(self.num_timesteps)
 
 
 class SaveCallback(BaseCallback):
-    def __init__(self, log_interval, log_path, algo, save=False, verbose=0):
+    """Save the model every log_interval steps and at the end (only when save=True)."""
+
+    def __init__(self, log_interval, log_path, save=False, verbose=0):
         super().__init__(verbose)
         self.log_interval = log_interval
         self.log_path = log_path
-        self.algo = algo
         self.save = save
 
     def _on_step(self) -> bool:
-        if self.save:
-            log_path = os.path.join(self.log_path, "model_" + str(self.num_timesteps))
-            if self.num_timesteps % self.log_interval == 0:
-                self.model.save(log_path)
-                if self.algo == "HER":
-                    self.model.save_replay_buffer(log_path)
+        if self.save and self.num_timesteps % self.log_interval == 0:
+            self.model.save(os.path.join(self.log_path, f"model_{self.num_timesteps}"))
         return True
 
     def _on_training_end(self) -> None:
         if self.save:
-            log_path = os.path.join(self.log_path, "model_last")
-            self.model.save(log_path)
-            if self.algo == "HER":
-                self.model.save_replay_buffer(log_path)
+            self.model.save(os.path.join(self.log_path, "model_last"))
 
 
 class EvaluationCallback(BaseCallback):

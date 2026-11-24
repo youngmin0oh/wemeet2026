@@ -10,7 +10,6 @@ from stable_baselines3.common.env_checker import check_env
 from analog_sizing.config import BENCHMARKS, benchmark_config, load_config
 from analog_sizing.envs import ngspice_env_base
 from analog_sizing.envs.ngspice_env import ngspice_env_cont, ngspice_env_disc
-from analog_sizing.envs.ngspice_env_goal import ngspice_env_goal
 from analog_sizing.gen_specs import gen_data
 
 
@@ -105,35 +104,15 @@ def test_tt_only_failure_uses_full_reward_range(circuit):
     assert (terminated, info["tt_done"], info["tt_sim"]) == (False, False, 1)
 
 
-@pytest.mark.parametrize("nominal", [[120.0, 8.0], [90.0, 12.0]])
-def test_tt_only_hindsight_reward_matches_step_reward(circuit, nominal):
-    config, rows = circuit
-    rows["nominal"] = nominal
-    env = ngspice_env_goal({**config, "tt_only": True})
-    env.reset(seed=0)
-    obs, reward, _, _, info = env.step(np.zeros(1))
-    batch = {key: np.stack([value]) for key, value in obs.items()}
-    relabeled = env.compute_reward(batch["achieved_goal"], batch["desired_goal"], [info])
-    np.testing.assert_allclose(relabeled, [reward], rtol=1e-4)
-
-
 @pytest.mark.parametrize("style", ["tanh", "normd"])
 def test_negative_goals_keep_the_inequality_direction(circuit, style):
     config, _ = circuit
-    env = ngspice_env_goal({**config, "lookup_style": style})
+    env = ngspice_env_cont({**config, "lookup_style": style})
     goal = np.array([-3.0, -3.0])                 # gain_min >= -3, power_max <= -3
     assert env.aggregate(np.array([0.5, -4.0]), goal) == 10.0
     assert env.aggregate(np.array([-4.0, 0.5]), goal) < -0.02
-    import torch
-    rewards = env.reward_batch(
-        torch.tensor([[0.5, -4.0], [-4.0, 0.5]]), torch.tensor([[-3.0, -3.0]] * 2)
-    )
-    assert rewards[0] == 10.0 and rewards[1] < -0.02
-    if style == "tanh":
-        norm = env.lookup(np.array([0.5, -4.0]), goal)
-        np.testing.assert_allclose(
-            ngspice_env_base.ngspice_env.unlookup(env, norm, goal), [0.5, -4.0], rtol=1e-4
-        )
+    # Above the goal is positive and below is negative, also for negative goals.
+    assert (np.sign(env.lookup(np.array([0.5, -4.0]), goal)) == [1, -1]).all()
 
 
 @pytest.mark.parametrize("env_type", [ngspice_env_cont, ngspice_env_disc])
@@ -154,40 +133,6 @@ def test_seeded_reset_and_framework_contract(circuit, env_type):
     assert 0.5 <= params[0] <= 10.0
 
 
-@pytest.mark.parametrize("done_in_goal", [False, True])
-@pytest.mark.parametrize("goal_in_obs", [False, True])
-@pytest.mark.parametrize("concat", [False, True])
-def test_goal_observations_and_batched_rewards(
-    circuit, done_in_goal, goal_in_obs, concat
-):
-    config, _ = circuit
-    env = ngspice_env_goal(
-        {
-            **config,
-            "SoF": False,
-            "done_in_goal": done_in_goal,
-            "goal_in_obs": goal_in_obs,
-            "concat_all_specs": concat,
-        }
-    )
-    obs, _ = env.reset(seed=0)
-    assert env.observation_space.contains(obs)
-    obs, _, _, _, info = env.step(np.zeros(1))
-    assert env.observation_space.contains(obs)
-    batch = {key: np.stack([value, value]) for key, value in obs.items()}
-    rewards = env.compute_reward(
-        batch["achieved_goal"], batch["desired_goal"], [info, info]
-    )
-    assert isinstance(rewards, np.ndarray)
-    assert rewards.shape == (2,)
-    assert np.isfinite(rewards).all()
-    env.relabel_goal = False
-    np.testing.assert_allclose(
-        env.compute_reward(batch["achieved_goal"], batch["desired_goal"], [info, info]),
-        [info["reward"], info["reward"]],
-    )
-
-
 @pytest.mark.parametrize("name", BENCHMARKS)
 def test_benchmark_targets_are_valid_reproducible_and_loadable(tmp_path, name):
     config = benchmark_config(name)
@@ -205,45 +150,6 @@ def test_benchmark_targets_are_valid_reproducible_and_loadable(tmp_path, name):
         assert all(low <= value <= high for value in values)
 
 
-@pytest.mark.parametrize("done_in_goal", [False, True])
-def test_goal_sampling_uses_the_raw_environment(circuit, monkeypatch, done_in_goal):
-    import torch
-    from stable_baselines3.common.logger import configure
-    from analog_sizing.callbacks import TrainingCallback
-
-    config, _ = circuit
-    env = ngspice_env_goal(
-        {**config, "online_goal": True, "done_in_goal": done_in_goal}
-    )
-    env.reset(seed=0)
-    env.step(np.zeros(1))
-    _, _, _, _, info = env.step(np.zeros(1))
-    chosen = []
-    monkeypatch.setattr(env, "set_goal_idx", chosen.append)
-    callback = TrainingCallback(env.num_corners, env, pareto_freq=1)
-
-    class Model:
-        device = torch.device("cpu")
-
-        def predict(self, observations, deterministic):
-            goals = observations["desired_goal"]
-            assert goals.shape[1] == len(env.specs_id) + (2 if done_in_goal else 0)
-            return np.zeros((goals.shape[0], len(env.params_id))), None
-
-        def critic(self, observations, actions):
-            values = torch.zeros((actions.shape[0], 1))
-            return values, values
-
-    callback.model = Model()
-    callback.model.logger = configure(format_strings=[])
-    callback.locals = {"infos": [info]}
-    assert callback._on_step()
-    assert len(chosen) == 1
-    assert 0 <= chosen[0] < 16
-    assert callback.logger.name_to_value["simulation/total_sim"] == 3
-    assert callback.logger.name_to_value["simulation/full_sim"] == 1
-
-
 def test_final_training_metrics_are_flushed(circuit, tmp_path):
     import csv
     from types import SimpleNamespace
@@ -252,7 +158,8 @@ def test_final_training_metrics_are_flushed(circuit, tmp_path):
 
     config, _ = circuit
     env = ngspice_env_cont(config)
-    callback = TrainingCallback(env.num_corners, env)
+    env.reset(seed=0)
+    callback = TrainingCallback(env)
     logger = configure(str(tmp_path / "training"), ["csv"])
     callback.model = SimpleNamespace(logger=logger)
     callback.num_timesteps = 1
@@ -292,3 +199,11 @@ def test_evaluation_metrics_are_written_to_the_local_logger(circuit, tmp_path):
     assert float(rows[0]["eval/success_rate"]) == 0
     assert float(rows[0]["eval/mean_ep_length"]) == 2
     assert float(rows[0]["eval/mean_reward"]) == pytest.approx(-0.40594282)
+
+
+def test_cli_options_reach_the_environment_under_their_config_names():
+    # click lowercases derived names (--SoF would arrive as "sof" and be ignored).
+    from analog_sizing.train import main
+
+    names = {param.name for param in main.params}
+    assert {"SoF", "tt_only", "online_goal", "CIR_YAML", "eval_CIR_YAML"} <= names

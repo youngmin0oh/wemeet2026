@@ -1,7 +1,7 @@
 """RL이 찾은 LDO(SKY130) 크기를 ALIGN 입력 넷리스트로 바꾼다.
 
 사용 예:
-    # 1) 기본 예제 설계(이 저장소의 HER 학습이 찾은, 9개 PVT corner 를 모두 통과한 설계)
+    # 1) 기본 예제 설계(이 저장소의 9개 PVT corner 학습이 찾은, 9개 corner 를 모두 통과한 설계)
     python layout/ldo_to_align.py --out layout/work/ldo_rl
 
     # 2) 학습 로그의 eval 결과에서 성공한 설계를 골라서
@@ -32,7 +32,7 @@ import numpy as np
 NAMES = ["W_M1", "L_M1", "W_M3", "L_M3", "W_M5", "L_M5",
          "W_pass", "L_pass", "M_pass", "Vb", "RFB", "CFB", "CL"]
 
-# 기본 예제: LDO HER(seed 42) 학습 후 eval task 25 에서 성공한 설계 (pass 소자가 가장 작은 설계)
+# 기본 예제: LDO 9개 corner 학습(seed 42) 후 eval task 25 에서 성공한 설계 (pass 소자가 가장 작은 설계)
 DEFAULT = [4.819, 1.789, 68.72, 0.5, 30.12, 1.418, 71.47, 0.5, 100, 1.4, 400, 9.39e-13, 4.082e-10]
 
 FIN_UM = 0.21          # SKY130_PDK/layers.json : Fin pitch 210nm

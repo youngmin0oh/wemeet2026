@@ -17,7 +17,7 @@ conda activate analog_sizing && python layout/check_ldo_quantized.py && python l
 ```
 
 처음부터 끝까지(SAC 로 크기 찾기 → 레이아웃 → post-layout 9개 PVT 판정) 한 번에 보려면 저장소 맨 위의
-`ex06_ldo_tt_sac.py`, `ex07_ldo_pvt_sac.py`, `ex08_ldo_layout_postlayout.py` 를 차례로 돌립니다
-([docs/MANUAL.md 8-1](../docs/MANUAL.md#8-1-ldo-로-처음부터-끝까지-ex06ex08)).
+`ex08_ldo_tt_sac.py`, `ex09_ldo_pvt_sac.py`, `ex10_ldo_layout_postlayout.py` 를 차례로 돌립니다
+([docs/MANUAL.md 8-1](../docs/MANUAL.md#8-1-ldo-로-처음부터-끝까지-ex08ex10)).
 
 결과물은 `layout/work/` 에 생기며 git 에는 올라가지 않습니다.

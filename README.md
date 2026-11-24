@@ -1,8 +1,7 @@
 # Analog Circuit Sizing
 
 Gymnasium environments for sizing analog circuits with ngspice, with continuous
-or discrete actions and optional goal-conditioned observations. Training supports Stable-Baselines3
-PPO, SAC, DDPG, and SAC with hindsight experience replay (HER).
+or discrete actions. Training uses Stable-Baselines3 SAC (default), PPO, or DDPG.
 
 | Benchmark | Circuit | Process |
 | --- | --- | --- |
@@ -142,7 +141,7 @@ finally:
 ## Train
 
 ```bash
-python analog_sizing/train.py --env_name TSA --algo HER --total_timesteps 12000
+python analog_sizing/train.py --env_name TSA --algo SAC --total_timesteps 12000
 bash scripts/TSA.sh
 ```
 
@@ -180,16 +179,19 @@ root. Built-in evaluation data is preserved separately from newly generated data
 
 ## Practice examples and automatic layout
 
-`ex01`–`ex05` introduce actor-critic, SAC, and PPO on Gymnasium tasks. `ex06`–`ex08`
-apply SAC to the SKY130 LDO from start to finish:
+`ex01`–`ex05` implement actor-critic, SAC, and PPO from scratch on Gymnasium tasks.
+`ex06` and `ex07` solve the same Pendulum task with Stable-Baselines3 SAC and PPO.
+`ex08`–`ex10` apply Stable-Baselines3 SAC to the SKY130 LDO from start to finish:
 
 ```bash
-python ex06_ldo_tt_sac.py              # TT corner only, then check the design on 9 PVT corners
-python ex07_ldo_pvt_sac.py             # 9 PVT corners with estimated layout parasitics
-python ex08_ldo_layout_postlayout.py   # ALIGN layout, extraction, post-layout PVT check
+python ex06_sac_sb3.py                 # ex04 with Stable-Baselines3
+python ex07_ppo_sb3.py                 # ex05 with Stable-Baselines3
+python ex08_ldo_tt_sac.py              # TT corner only, then check the design on 9 PVT corners
+python ex09_ldo_pvt_sac.py             # 9 PVT corners with estimated layout parasitics
+python ex10_ldo_layout_postlayout.py   # ALIGN layout, extraction, post-layout PVT check
 ```
 
-`ex08` and `layout/run_ldo_layout.sh` need ALIGN. Installation, expected output, and
+`ex10` and `layout/run_ldo_layout.sh` need ALIGN. Installation, expected output, and
 the example specification are described in [docs/MANUAL.md](docs/MANUAL.md)
 (sections 8 and 9).
 
@@ -209,7 +211,7 @@ eval_engines/
 scripts/               # Circuit launchers and random-rollout example
 tests/                 # Environment and simulation-wrapper regression checks
 layout/                # ALIGN layout and post-layout scripts for the LDO
-ex01_*.py ... ex08_*.py  # Practice examples (ex_ldo_common.py is shared by ex06-ex08)
+ex01_*.py ... ex10_*.py  # Practice examples (ex_ldo_common.py is shared by ex08-ex10)
 docs/MANUAL.md         # Step-by-step manual (Korean)
 ```
 

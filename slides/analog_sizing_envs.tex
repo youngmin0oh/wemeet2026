@@ -17,6 +17,8 @@
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
 \usepackage[most]{tcolorbox}
+\usepackage{graphicx}
+\graphicspath{{../docs/img/}}
 
 % ---------------- Colors ----------------
 \definecolor{ink}{HTML}{1B2A41}
@@ -104,10 +106,11 @@
 \lstdefinestyle{sh}{style=py, language=bash, keywordstyle=\color{ink}}
 \lstset{style=py}
 \newcommand{\cc}[1]{\texttt{#1}}
+\input{ldo_margin_maps.tex}   % LDO corner x 스펙 여유 지도 (\marginmapTT, \marginmapPost)
 
 % ---------------- Meta ----------------
 \title{analog\_sizing/envs 쉽게 읽기}
-\subtitle{회로 설계를 강화학습 ‘게임’으로 바꾸는 방법}
+\subtitle{회로 설계를 강화학습 ‘게임’으로: TT → PVT → 레이아웃까지}
 \date{2026. 11.}
 
 \begin{document}
@@ -119,6 +122,29 @@
 
 % ==================================================
 \section{개요}
+
+\begin{frame}{이 자료의 흐름}
+  \centering
+  \begin{tikzpicture}[
+      st/.style={draw=brand!45, fill=brand!6, rounded corners=3pt, align=center, text width=2.95cm,
+                 minimum height=2.2cm, font=\footnotesize, text=ink},
+      hl/.style={st, draw=accent!60, fill=accent!8},
+      arr/.style={-{Stealth[length=2.2mm]}, thick, draw=muted},
+    ]
+    \node[st] (a) at (0,0)    {{\small\textbf{① env 읽기}}\\[3pt]TSA 증폭기로\\관측 · 행동 · 보상};
+    \node[hl] (b) at (3.5,0)  {{\small\textbf{② TT 와 PVT}}\\[3pt]칩마다 다른\\공정 · 전압 · 온도};
+    \node[st] (c) at (7.0,0)  {{\small\textbf{③ LDO 학습}}\\[3pt]ex08: TT 만\\ex09: 9 corner 전부};
+    \node[hl] (d) at (10.5,0) {{\small\textbf{④ 레이아웃 후}}\\[3pt]ex10: ALIGN 배치\\post-layout 확인};
+    \draw[arr] (a) -- (b); \draw[arr] (b) -- (c); \draw[arr] (c) -- (d);
+  \end{tikzpicture}
+  \vspace{0.9em}
+  \begin{keybox}
+    시뮬레이션 숫자 하나를 맞추는 데서 끝내지 않고, \textbf{실제 칩이 겪는 조건(PVT)} 과
+    \textbf{레이아웃 후}에도 스펙을 지키는지까지 확인합니다.
+  \end{keybox}
+  \vspace{0.3em}
+  {\footnotesize\color{muted} 코드: \cc{analog\_sizing/envs/} (env) \ · \ \cc{ex08\_ldo\_tt\_sac.py}, \cc{ex09\_ldo\_pvt\_sac.py}, \cc{ex10\_ldo\_layout\_postlayout.py} (LDO 예제)}
+\end{frame}
 
 \begin{frame}{한 줄 요약}
   \begin{keybox}[colback=accent!9,colframe=accent!9]
@@ -188,6 +214,26 @@
    CMA · LDO · COMP도 YAML만 바꿔 같은 env를 씁니다.}
 \end{frame}
 
+\begin{frame}{TSA 성능 6개는 무엇을 재나}
+  \begin{cmptable}[1.3]{H{2.1cm}LR{2.0cm}}
+    \hd{이름} & \hd{무엇을 재나} & \hd{목표 범위} \\
+    \midrule
+    gain\_min & DC 이득: 입력 차이를 몇 배로 키우나 (클수록 피드백 오차가 작음) & ≥ 200 – 300 \\
+    ugbw\_min & 단위 이득 대역폭: 이득이 1배가 되는 주파수 (빠르기) & ≥ 1 – 20 MHz \\
+    phm\_min & 위상 여유: 피드백 루프가 발진하기까지 남은 위상 (작으면 출렁임) & ≥ 60° \\
+    vswing\_min & 출력 전압 폭: 이득이 최대의 70\% 이상 유지되는 출력 범위 & ≥ 0.2 – 0.3 V \\
+    ibias\_max & 바이어스 전류: 전력 = 전류 × 전원 전압 & ≤ 1 – 10 mA \\
+    t\_settle\_max & 정착 시간: 계단 입력 뒤 출력이 최종값 1\% 안에 들기까지 & ≤ 2 – 10 μs \\
+    \bottomrule
+  \end{cmptable}
+  \vspace{0.6em}
+  \begin{keybox}
+    \small 여섯 가지가 \textbf{서로 반대로 움직입니다}. 이득 · 대역폭을 올리려고 전류나 소자를 키우면 전력이 늘고 위상 여유가 줄어듭니다.
+    그래서 손으로 맞추기 어렵고, RL 이 크기 7개를 조금씩 바꿔 가며 균형점을 찾습니다.
+  \end{keybox}
+  {\footnotesize\color{muted} 목표 범위 = YAML \cc{target\_specs}. 학습 때는 매 에피소드 이 범위 안에서 목표를 하나 뽑습니다.}
+\end{frame}
+
 \begin{frame}[fragile]{ex01과 똑같은 Gymnasium 인터페이스}
 \begin{lstlisting}
 from analog_sizing.config import benchmark_config
@@ -209,7 +255,7 @@ obs, reward, terminated, truncated, info = env.step(action)
 % ==================================================
 \section{구조}
 
-\begin{frame}{파일 3개, 클래스 4개}
+\begin{frame}{파일 2개, 클래스 3개}
   \begin{columns}[T,onlytextwidth]
     \begin{column}{0.5\textwidth}
       \centering
@@ -223,11 +269,8 @@ obs, reward, terminated, truncated, info = env.step(action)
         \node[cls] (d) at (-1.55,-1.7) {\textbf{ngspice\_env\_disc}\\{\scriptsize 이산 행동}};
         \node[cls] (c) at (1.55,-1.7) {\textbf{ngspice\_env\_cont}\\{\scriptsize 연속 행동}};
         \node[font=\scriptsize, text=muted] at (0,-2.45) {ngspice\_env.py};
-        \node[cls, draw=c05!60, fill=c05!8] (g) at (1.55,-3.55) {\textbf{ngspice\_env\_goal}\\{\scriptsize HER용 목표 조건부}};
-        \node[font=\scriptsize, text=muted, anchor=north] at (g.south) {ngspice\_env\_goal.py};
         \draw[arr] (d) -- (d |- b.south);
         \draw[arr] (c) -- (c |- b.south);
-        \draw[arr] (g) -- (c);
       \end{tikzpicture}
     \end{column}
     \begin{column}{0.46\textwidth}
@@ -235,12 +278,10 @@ obs, reward, terminated, truncated, info = env.step(action)
         \item \textbf{공통 뼈대}: reset / step, 시뮬레이션, 보상, 목표 고르기
         \item \textbf{disc / cont}: ‘행동 → 크기’ 변환 함수 3개만 채움\\
               {\footnotesize\cc{init\_params}, \cc{update\_params}, \cc{translate\_params}}
-        \item \textbf{goal}: 관측을 Dict로 바꾸고, HER용 보상 재계산
       \end{itemize}
       \vspace{0.3em}
       \begin{keybox}
-        \small \cc{train.py}: HER → \cc{ngspice\_env\_goal}\\
-        PPO · SAC · DDPG → \cc{ngspice\_env\_cont}
+        \small \cc{train.py}: SAC · PPO · DDPG → \cc{ngspice\_env\_cont}
       \end{keybox}
     \end{column}
   \end{columns}
@@ -353,6 +394,147 @@ obs, reward, terminated, truncated, info = env.step(action)
 \end{frame}
 
 % ==================================================
+\section{TT 와 PVT}
+
+\begin{frame}{TT 와 PVT: 같은 설계도로 만들어도 칩마다 다르다}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.315\textwidth}
+      \begin{keybox}[equal height group=pvt]
+        \boxtitle{P \ {\normalfont\small 공정 (Process)}}
+        \small 웨이퍼마다 도핑 · 산화막 두께 · 선폭이 조금씩 달라서 트랜지스터가
+        \textbf{빠르게(f)} 또는 \textbf{느리게(s)} 만들어짐\\[3pt]
+        {\footnotesize 빠름 = 문턱 전압 낮고 전류 많음. NMOS 와 PMOS 가 따로 흔들림}
+      \end{keybox}
+    \end{column}
+    \begin{column}{0.315\textwidth}
+      \begin{keybox}[equal height group=pvt]
+        \boxtitle{V \ {\normalfont\small 전원 전압 (Voltage)}}
+        \small 전원이 정확히 3.3V 가 아님. 배터리 · 레귤레이터 · 배선 강하 때문에 흔들림\\[3pt]
+        {\footnotesize TSA: 3.3V 기준 3.0 – 3.6V (약 ±10\%)}
+      \end{keybox}
+    \end{column}
+    \begin{column}{0.315\textwidth}
+      \begin{keybox}[equal height group=pvt]
+        \boxtitle{T \ {\normalfont\small 온도 (Temperature)}}
+        \small 겨울 바깥부터 뜨거운 엔진룸까지\\[3pt]
+        {\footnotesize −40 – 125°C. 온도가 오르면 이동도가 줄어 전류가 줄고, 문턱 전압도 내려감}
+      \end{keybox}
+    \end{column}
+  \end{columns}
+  \vspace{0.5em}
+  \begin{itemize}\small
+    \item \textbf{TT} (typical-typical, 기본 전압, 27°C) = 설계도대로 만들어진 ‘보통’ 칩 하나
+    \item 공장에서 나온 \textbf{모든 칩이, 모든 사용 조건에서} 스펙을 지켜야 팔 수 있음 (수율)
+    \item 그래서 TT 하나만 맞추면 부족하고, 흔들림의 \textbf{끝 점(corner)} 들에서도 확인해야 함
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{corner: 흔들림의 끝 점만 골라 시뮬레이션}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.46\textwidth}
+      \textbf{\color{brand}공정 corner 이름 읽기}\par\smallskip
+      \begin{cmptable}[1.25]{H{1.1cm}L}
+        \hd{이름} & \hd{뜻 (앞 글자 NMOS, 뒤 글자 PMOS)} \\
+        \midrule
+        tt & 둘 다 보통 \\
+        ff & 둘 다 빠름 → 전류 많음, 전력 큼 \\
+        ss & 둘 다 느림 → 이득 · 속도 부족 \\
+        fs & NMOS 빠름, PMOS 느림 \\
+        sf & NMOS 느림, PMOS 빠름 \\
+        \bottomrule
+      \end{cmptable}
+      \vspace{0.3em}
+      {\footnotesize fs · sf 는 NMOS 와 PMOS 의 균형이 깨지는 경우라 바이어스가 틀어지기 쉬움}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \textbf{\color{brand}이 저장소의 corner}\par\smallskip
+      \begin{cmptable}[1.25]{H{1.3cm}L}
+        \hd{회로} & \hd{corner} \\
+        \midrule
+        TSA · CMA · COMP & \textbf{17개} = TT (3.3V, 27°C)\newline + \{ff, ss, fs, sf\} × \{3.0, 3.6V\} × \{−40, 125°C\} \\
+        LDO & \textbf{9개} = TT (2.0V, 27°C)\newline + \{ff, ss, fs, sf\} × \{−40, 125°C\}\newline {\footnotesize(전원 2.0V 고정)} \\
+        \bottomrule
+      \end{cmptable}
+      \vspace{0.3em}
+      {\footnotesize corner 하나 = 넷리스트 하나 (YAML \cc{dsn\_netlist}).\\
+       Monte Carlo(무작위 수백 번)는 더 촘촘하지만 훨씬 비쌈 → 학습에는 corner 를 씀}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{왜 PVT 까지 봐야 하나: TT 만 보고 찾은 LDO (ex08)}
+  {\small \cc{tt\_only=True} 환경에서 SAC 로 찾은 설계. TT 에서는 \textbf{모든 스펙을 여유 있게} 넘었습니다 (가장 빠듯한 여유 +3.46).}
+  \vspace{0.4em}
+
+  \begin{cmptable}[1.25]{H{4.2cm}R{1.6cm}R{1.6cm}R{1.8cm}L}
+    \hd{같은 설계를 9개 corner 에서} & \hd{스펙} & \hd{TT 값} & \hd{최악값} & \hd{최악 corner} \\
+    \midrule
+    PSRR 최소 부하, 10kHz & ≥ 10 dB & 26.01 & \textbf{\color{accent}7.27} & sf, −40°C \\
+    PSRR 최소 부하, 1MHz & ≥ 10 dB & 23.12 & \textbf{\color{accent}6.99} & sf, −40°C \\
+    위상 여유, 최대 부하 & ≥ 60° & 65.12 & \textbf{\color{accent}55.55} & fs, −40°C \\
+    위상 여유, 최소 부하 & ≥ 60° & 65.66 & \textbf{\color{accent}52.46} & ss, −40°C \\
+    나머지 5개 & & & 통과 & \\
+    \bottomrule
+  \end{cmptable}
+  \vspace{0.5em}
+  \begin{warnbox}
+    \warntitle{TT 합격 ≠ 칩 합격}
+    \small TT 에서 +3 의 여유가 있어도 저온 · 공정 편차에서 위상 여유가 13° 빠집니다 (65.7° → 52.5°).
+    이 칩을 만들면 추운 곳에서 출력이 출렁이거나 잡음을 못 거릅니다 → \textbf{처음부터 PVT 를 보고 학습}해야 합니다 (ex09).
+  \end{warnbox}
+\end{frame}
+
+\begin{frame}{Corner와 SoF (Skip on Fail)}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.52\textwidth}
+      \centering
+      \begin{tikzpicture}[
+          cell/.style={draw=white, line width=1pt, fill=codebg, minimum width=1.0cm, minimum height=0.55cm,
+                       font=\scriptsize, text=ink, inner sep=0pt},
+        ]
+        \node[cell, fill=accent!20, minimum height=2.2cm, minimum width=1.15cm, align=center] (tt) at (-1.3,-0.825)
+             {\textbf{TT}\\3.3V\\27°C};
+        \foreach \c/\h [count=\j] in {3.0V/−40°C, 3.6V/−40°C, 3.0V/125°C, 3.6V/125°C}
+          \node[font=\tiny, text=muted, align=center] at (\j*1.0-0.5, 0.55) {\c\\\h};
+        \foreach \p [count=\i] in {ff, ss, fs, sf} {
+          \foreach \j in {1,...,4} \node[cell] at (\j*1.0-0.5, -\i*0.55+0.275) {\p};
+        }
+        \draw[decorate, decoration={brace, amplitude=4pt, mirror}, thick, muted]
+             (0,-2.3) -- (4,-2.3) node[midway, below=5pt, font=\scriptsize, text=ink] {TT가 실패하면 16개 모두 생략};
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{0.44\textwidth}
+      \begin{itemize}\small
+        \item 공정 · 전압 · 온도가 달라져도 동작해야 진짜 설계 → \textbf{17개 조건(corner)}
+        \item 성능 = spec마다 \textbf{가장 나쁜} corner 값
+        \item \textbf{SoF}: TT부터 실패면 나머지 16개는 볼 필요 없음 → 시뮬레이션 절약
+        \item 편차 페널티: corner 성능이 TT와 얼마나 다른지
+              {\footnotesize $\sqrt{\text{mean}\,(\text{corner}/\text{TT} - 1)^2}$, 0 – 1로 자름.\\ TT부터 실패면 1(최대)로 침}
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{TT 만 vs PVT: 비용과 결과 (LDO, seed 0)}
+  \begin{cmptable}[1.3]{H{3.6cm}LL}
+    \hd{} & \hd{ex08: TT 만} & \hd{ex09: 9개 PVT + 레이아웃 기생 추정} \\
+    \midrule
+    env 설정 & \cc{tt\_only=True} & 기본 (SoF: TT 를 통과할 때만 나머지 8개) \\
+    step 당 시뮬레이션 & 항상 1번 & 1번 또는 9번 \\
+    학습 (성공 설계 30개까지) & 257 step, 시뮬레이션 257번, \textbf{93초} & 2,689 step, 시뮬레이션 15,521번, \textbf{35분} \\
+    첫 성공 & 121 step & 980 step \\
+    9개 PVT 에서 확인 & \textbf{\color{accent}4개 스펙 미달} (여유 −7.54) & \textbf{\color{okgreen}모두 통과} (여유 +2.89) \\
+    \bottomrule
+  \end{cmptable}
+  \vspace{0.5em}
+  \begin{itemize}\small
+    \item PVT 학습은 \textbf{약 60배} 많은 시뮬레이션이 들지만, 실제로 쓸 수 있는 설계가 나옴
+    \item SoF 덕분에 매 step 9개를 다 돌렸을 때(24,201번)보다 \textbf{36\% 절약}
+    \item 여유 = 가장 빠듯한 스펙의 (값 − 스펙). 10mV · 1dB · 1° 를 1 로 셈
+  \end{itemize}
+\end{frame}
+
+% ==================================================
 \section{보상}
 
 \begin{frame}{보상 ①: spec 하나씩 채점하기}
@@ -404,36 +586,6 @@ obs, reward, terminated, truncated, info = env.step(action)
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Corner와 SoF (Skip on Fail)}
-  \begin{columns}[T,onlytextwidth]
-    \begin{column}{0.52\textwidth}
-      \centering
-      \begin{tikzpicture}[
-          cell/.style={draw=white, line width=1pt, fill=codebg, minimum width=1.0cm, minimum height=0.55cm,
-                       font=\scriptsize, text=ink, inner sep=0pt},
-        ]
-        \node[cell, fill=accent!20, minimum height=2.2cm, minimum width=1.15cm, align=center] (tt) at (-1.3,-0.825)
-             {\textbf{TT}\\3.3V\\27°C};
-        \foreach \c/\h [count=\j] in {3.0V/−40°C, 3.6V/−40°C, 3.0V/125°C, 3.6V/125°C}
-          \node[font=\tiny, text=muted, align=center] at (\j*1.0-0.5, 0.55) {\c\\\h};
-        \foreach \p [count=\i] in {ff, ss, fs, sf} {
-          \foreach \j in {1,...,4} \node[cell] at (\j*1.0-0.5, -\i*0.55+0.275) {\p};
-        }
-        \draw[decorate, decoration={brace, amplitude=4pt, mirror}, thick, muted]
-             (0,-2.3) -- (4,-2.3) node[midway, below=5pt, font=\scriptsize, text=ink] {TT가 실패하면 16개 모두 생략};
-      \end{tikzpicture}
-    \end{column}
-    \begin{column}{0.44\textwidth}
-      \begin{itemize}\small
-        \item 공정 · 전압 · 온도가 달라져도 동작해야 진짜 설계 → \textbf{17개 조건(corner)}
-        \item 성능 = spec마다 \textbf{가장 나쁜} corner 값
-        \item \textbf{SoF}: TT부터 실패면 나머지 16개는 볼 필요 없음 → 시뮬레이션 절약
-        \item 편차 페널티: corner 성능이 TT와 얼마나 다른지
-              {\footnotesize $\sqrt{\text{mean}\,(\text{corner}/\text{TT} - 1)^2}$, 0 – 1로 자름.\\ TT부터 실패면 1(최대)로 침}
-      \end{itemize}
-    \end{column}
-  \end{columns}
-\end{frame}
 
 % ==================================================
 \section{목표}
@@ -444,7 +596,7 @@ obs, reward, terminated, truncated, info = env.step(action)
     \midrule
     generalize = False & YAML의 \cc{normalize} 값 하나로 고정 & 목표 하나만 풀 때 \\
     generalize = True\newline online\_goal = False & pickle 목표 목록에서 하나 (검증 env는 순서대로) & 평가 env \\
-    generalize = True\newline online\_goal = True & YAML \cc{target\_specs} 범위에서 뽑기 + Pareto 샘플링 & 학습 env (\cc{train.py} 기본) \\
+    generalize = True\newline online\_goal = True & YAML \cc{target\_specs} 범위에서 뽑기 & 학습 env (\cc{train.py} 기본) \\
     \bottomrule
   \end{cmptable}
   \vspace{0.6em}
@@ -453,64 +605,261 @@ obs, reward, terminated, truncated, info = env.step(action)
   \end{keybox}
 \end{frame}
 
-\begin{frame}{Pareto 목표 샘플링: 이미 넘은 높이는 건너뛰기}
+% ==================================================
+\section{LDO: 레이아웃까지}
+
+\begin{frame}{LDO: 전원이 흔들려도 출력은 1.8 V}
   \begin{columns}[T,onlytextwidth]
-    \begin{column}{0.46\textwidth}
+    \begin{column}{0.54\textwidth}
       \centering
-      \begin{tikzpicture}[x=0.95cm, y=0.8cm]
-        \fill[muted!18] (0,2.0) rectangle (1.5,5);
-        \fill[muted!18] (0,3.2) rectangle (3.0,5);
-        \fill[muted!18] (0,4.3) rectangle (4.5,5);
-        \draw[-{Stealth[length=2mm]}, thick, muted] (0,0) -- (5.3,0) node[below left, font=\scriptsize, text=ink, align=right] {gain 목표 → 어려움};
-        \draw[-{Stealth[length=2mm]}, thick, muted] (0,0) -- (0,5.3) node[right, font=\scriptsize, text=ink] {허용 전류 ↑ 쉬움};
-        \foreach \x/\y in {1.5/2.0, 3.0/3.2, 4.5/4.3} \fill[c04] (\x,\y) circle (3pt);
-        \node[font=\scriptsize, text=muted, align=center] at (1.5,3.85) {이미 해낸 것보다\\쉬움 → 버림};
-        \node[font=\scriptsize, text=c04, anchor=north west] at (1.55,1.95) {성공 기록};
-        \draw[thick, muted] (0.75,2.6) ++(-3pt,-3pt) -- ++(6pt,6pt) ++(-6pt,0) -- ++(6pt,-6pt);
-        \fill[c05] (3.6,1.4) circle (3pt) node[right, font=\scriptsize, text=c05] {새 후보 OK};
+      \begin{tikzpicture}[
+          blk/.style={draw=brand!45, fill=brand!6, rounded corners=3pt, align=center, font=\footnotesize,
+                      text=ink, minimum height=0.9cm, inner sep=3pt},
+          wire/.style={thick, draw=ink!70},
+          arr/.style={-{Stealth[length=2mm]}, thick, draw=ink!70},
+        ]
+        \node[font=\footnotesize, text=ink] (vdd) at (3.9,3.0) {\textbf{VDD} 2.0V \ {\color{accent}+ 잡음}};
+        \node[blk, fill=accent!8, draw=accent!60] (pass) at (3.9,1.8) {패스 트랜지스터 M6\\{\scriptsize W\_pass × M\_pass 개 병렬}};
+        \node[blk] (amp) at (0,1.8) {오차 증폭기\\{\scriptsize M1 – M5}};
+        \node[font=\footnotesize, text=ink] (vref) at (0,3.0) {Vref 1.8V};
+        \coordinate (vout) at (3.9,0.3);
+        \node[blk] (load) at (3.9,-1.0) {부하 10μA – 10mA\\{\scriptsize + 부하 커패시터 CL}};
+        \node[blk, fill=codebg, draw=muted!50, minimum height=0.55cm, font=\scriptsize] (rc) at (1.6,1.05) {RFB, CFB};
+        \draw[wire] (vdd) -- (pass);
+        \draw[wire] (pass) -- (vout) -- (load);
+        \fill[ink] (vout) circle (1.8pt);
+        \node[font=\footnotesize, text=okgreen, anchor=south west] at ([xshift=2pt]vout) {\textbf{출력 1.8V}};
+        \draw[arr] (vref) -- (amp);
+        \draw[arr] (amp.east) -- node[above, font=\scriptsize, text=muted] {게이트} (pass.west);
+        \draw[arr] (vout) -- (0,0.3) -- (amp.south);
+        \node[font=\scriptsize, text=muted, anchor=north] at (0.75,0.3) {되먹임};
+        \draw[wire, draw=muted] (rc.north) -- (1.6,1.8);
+        \draw[wire, draw=muted] (rc.south) -- (1.6,0.3);
+        \fill[ink!70] (1.6,1.8) circle (1.3pt); \fill[ink!70] (1.6,0.3) circle (1.3pt);
       \end{tikzpicture}
     \end{column}
-    \begin{column}{0.5\textwidth}
-      \begin{enumerate}\small
-        \item 성공한 목표를 기록. 더 어려운 성공이 나오면 쉬운 기록은 지움\\
-              → \textbf{지금까지 해낸 가장 어려운 목표들}만 남음
-        \item 다음 후보 16개: 범위에서 랜덤으로 뽑되, 기록보다 쉬운 것은 다시 뽑음
-        \item 학습 쪽 callback이 critic(Q)에게 물어 \textbf{어려워 보이는} 후보를 softmax로 고름 (\cc{set\_goal\_idx})
-      \end{enumerate}
-      {\footnotesize\color{muted} 성공 기록이 \cc{n\_warmup}개(TSA.sh는 4) 쌓이기 전에는 그냥 랜덤}
+    \begin{column}{0.43\textwidth}
+      \begin{itemize}\small
+        \item 출력이 1.8V 보다 내려가면 증폭기가 패스 트랜지스터를 더 열어 전류를 더 흘림 → 출력 복귀
+        \item 전원 잡음이 출력에 덜 나올수록 좋음 (PSRR)
+        \item 부하 전류가 \textbf{1000배} 바뀌어도 (10μA – 10mA) 안정해야 함
+      \end{itemize}
+      \vspace{0.2em}
+      \begin{keybox}
+        \boxtitle{조절하는 값 13개}
+        \footnotesize M1 · M3 · M5 의 W, L (M2 = M1, M4 = M3) · 패스 소자 W\_pass, L\_pass, M\_pass(병렬 개수) ·
+        바이어스 Vb · 보상 RFB, CFB · 부하 CL\\[2pt]
+        {\color{muted}SKY130 5V 소자, \cc{ldo\_sky130.yaml}}
+      \end{keybox}
     \end{column}
   \end{columns}
 \end{frame}
 
-\begin{frame}{\cc{ngspice\_env\_goal}: HER을 위한 env}
-  \begin{columns}[T,onlytextwidth]
-    \begin{column}{0.5\textwidth}
-      \textbf{\color{brand}관측이 Dict 3칸으로}\par\smallskip
-      \begin{itemize}\small
-        \item \cc{observation}: 크기 7개\\{\footnotesize\color{muted}(TSA.sh는 \cc{goal\_in\_obs=False})}
-        \item \cc{achieved\_goal}: 지금 성능 6개 + [done, tt\_done]
-        \item \cc{desired\_goal}: 목표 6개 + [1, 1]
-      \end{itemize}
-      \vspace{0.3em}
-      \textbf{\color{brand}HER 아이디어}\par\smallskip
-      {\small 실패한 시도도 “그때 실제로 나온 성능이 목표였다면?”으로 바꿔 \textbf{성공 경험}으로 재활용 → \cc{compute\_reward()}가 바뀐 목표로 보상을 다시 계산}
-    \end{column}
-    \begin{column}{0.46\textwidth}
-      \centering
-      \begin{tikzpicture}
-        \fill[ink] (0,0) circle (2.5pt) node[below, font=\scriptsize, text=ink] {시작};
-        \draw[thick, c04, -{Stealth[length=2.2mm]}] (0,0) .. controls (1.2,1.6) and (2.2,0.6) .. (3.2,1.2);
-        \fill[c04] (3.2,1.2) circle (2.5pt) node[below right, font=\scriptsize, text=c04, align=left] {실제 도착\\(achieved)};
-        \node[star, star points=5, fill=c05, inner sep=1.6pt] at (2.2,3.0) {};
-        \node[font=\scriptsize, text=c05, align=center, anchor=south] at (2.2,3.15) {원래 목표 (desired)\\→ 실패};
-        \draw[thick, densely dashed, muted, -{Stealth[length=2mm]}] (2.3,2.85) -- (3.1,1.4);
-        \node[font=\scriptsize, text=ink, align=left, anchor=west] at (2.85,2.25) {목표를 여기로\\옮겨 다시 저장\\→ 성공};
-      \end{tikzpicture}
-      \vspace{0.3em}
+\begin{frame}{LDO 스펙 9개의 뜻 (예제 스펙)}
+  \begin{cmptable}[1.15]{H{3.3cm}P{6.6cm}L}
+    \hd{스펙} & \hd{무엇을 재나} & \hd{예제 값} \\
+    \midrule
+    드롭아웃 전압 & 전원 2.0V, 부하 10mA 에서 VDD − 출력 (출력이 1.8V 면 200mV) & ≤ 250 mV \\
+    PSRR, 최대 부하 (10mA) & 전원 잡음이 출력에서 몇 분의 1 로 줄어드나 (20 dB = 1/10).\newline 구간 안 최악값: 10kHz 이하 / 1MHz 이하 / 1MHz 이상 & ≥ 14 / 9 / −3 dB \\
+    PSRR, 최소 부하 (10μA) & 위와 같음 & ≥ 10 / 10 / 12 dB \\
+    위상 여유, 최대 · 최소 부하 & 출력 → 증폭기 → 패스 트랜지스터로 도는 루프가 발진하지 않는 여유 & ≥ 60° / 60° \\
+    \bottomrule
+  \end{cmptable}
+  \vspace{0.5em}
+  \begin{itemize}\small
+    \item 높은 주파수에서는 증폭기가 따라가지 못해 잡음이 거의 그대로 지나감 → 1MHz 이상 PSRR 은 0 dB 근처
+          {\footnotesize (−3 dB = 잡음이 1.4배까지 커지는 것은 허용)}
+    \item 부하 전류가 바뀌면 루프 특성이 바뀜 → 위상 여유를 최대 · 최소 부하 \textbf{둘 다} 봄.
+          9개 스펙 모두 9개 corner 의 \textbf{최악값}으로 판정
+  \end{itemize}
+\end{frame}
 
-      {\footnotesize ex04 SAC + replay buffer에서 \textbf{buffer 속 목표만 바꿔 쓰는 것}}
+\begin{frame}{레이아웃까지 가는 길: ex09 → ex10}
+  \centering
+  \begin{tikzpicture}[
+      st/.style={draw=brand!45, fill=brand!6, rounded corners=3pt, align=center, text width=2.85cm,
+                 minimum height=2.6cm, font=\footnotesize, text=ink},
+      hl/.style={st, draw=accent!60, fill=accent!8},
+      arr/.style={-{Stealth[length=2.2mm]}, thick, draw=muted},
+    ]
+    \node[st] (a) at (0,0)    {\textbf{① 학습 (ex09)}\\[3pt]9개 corner + 기생 추정\\목표 = 스펙 + 여유\\[2pt]{\scriptsize 성공 설계 30개}};
+    \node[st] (b) at (3.4,0)  {\textbf{② 후보 고르기}\\[3pt]ALIGN 이 그릴 폭으로 반올림\\(fin 0.21μm 격자)\\[2pt]{\scriptsize 다시 시뮬레이션해\\여유가 가장 큰 설계}};
+    \node[hl] (c) at (6.8,0)  {\textbf{③ ALIGN (ex10)}\\[3pt]자동 배치 · 배선\\→ GDS\\[2pt]{\scriptsize 배선 R/C 추출}};
+    \node[hl] (d) at (10.2,0) {\textbf{④ post-layout}\\[3pt]추출한 R/C 를 넣은\\넷리스트 9개\\[2pt]{\scriptsize 9개 corner 판정}};
+    \draw[arr] (a) -- (b); \draw[arr] (b) -- (c); \draw[arr] (c) -- (d);
+  \end{tikzpicture}
+  \vspace{0.7em}
+  \begin{cmptable}[1.2]{H{3.0cm}L}
+    \hd{단계} & \hd{seed 0 결과} \\
+    \midrule
+    ① 학습 & 35분, 시뮬레이션 15,521번, 첫 성공 980 step \\
+    ② 고른 설계 & W\_M1 7.24 · W\_M3 100 · W\_M5 55.0 μm, 패스 38.4 μm × 200개, RFB 2.56 kΩ, CFB 2.9 pF, CL 550 pF \\
+    ③ 레이아웃 & 102초, 213.3 × 219.4 μm, ALIGN 자체 LVS/DRC 오류 0 \\
+    ④ post-layout & \textbf{9개 corner 모두 통과}, 가장 빠듯한 여유 +1.90 \\
+    \bottomrule
+  \end{cmptable}
+\end{frame}
+
+\begin{frame}{레이아웃 기생: 회로도에 없던 R 과 C}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.53\textwidth}
+      {\small 회로도에는 배선의 R 과 C 가 없습니다. 이 LDO 에서 가장 크게 성능을 깎는 두 가지:}
+      \vspace{0.2em}
+
+      \begin{warnbox}
+        \warntitle{① 패스 게이트 배선 C}
+        \footnotesize 증폭기 출력 → 패스 트랜지스터 게이트 수천 개를 잇는 배선. 패스 소자 폭 1μm 당 약 0.22 fF\\
+        → 위상 여유 61.5° → 56.9°, 1MHz PSRR 14.3 → 11.7 dB
+      \end{warnbox}
+      \begin{warnbox}
+        \warntitle{② VDD 배선 R (약 3.5 Ω)}
+        \footnotesize 10mA × 3.5Ω = 35mV 강하 → 10kHz PSRR 21.4 → 16.9 dB
+      \end{warnbox}
+      {\scriptsize\color{muted} 숫자: 이전 설계에 하나씩 넣어 본 결과 (MANUAL 9-5)}
+    \end{column}
+    \begin{column}{0.43\textwidth}
+      \begin{keybox}
+        \boxtitle{ex09 의 대책}
+        \small
+        \begin{enumerate}\setlength{\itemsep}{0pt}
+          \item 기생 추정값을 넣고 학습
+          \item 학습 목표 = 스펙 + 여유
+          \item 레이아웃 폭으로 다시 확인
+        \end{enumerate}
+      \end{keybox}
+      \vspace{0.2em}
+      {\footnotesize 추정 vs ex10 실제 추출: 거의 같음}\par\smallskip
+      \begin{cmptable}[1.2]{H{2.6cm}R{0.8cm}R{0.9cm}}
+        \hd{기생} & \hd{추정} & \hd{추출} \\
+        \midrule
+        게이트 C, fF/μm & 0.22 & 0.222 \\
+        VDD R, Ω & 3.5 & 3.54 \\
+        \bottomrule
+      \end{cmptable}
     \end{column}
   \end{columns}
+\end{frame}
+
+\begin{frame}{ALIGN 이 그린 레이아웃 (ex10)}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.47\textwidth}
+      \centering
+      \includegraphics[height=5.7cm]{ex10_ldo_layout.png}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{itemize}\small\setlength{\itemsep}{2pt}
+        \item 213.3 × 219.4 μm (0.047 mm²), 자동 배치 · 배선 \textbf{102초}
+        \item 위쪽 큰 배열: 패스 트랜지스터 M6 {\footnotesize (38.4μm × 200개 = 총 폭 7,680μm)}
+        \item 아래쪽: 오차 증폭기 M1 – M5
+        \item ALIGN 자체 검사: \textbf{short 0, open 0, DRC 0}
+        \item 폭은 fin(0.21μm) 격자로 반올림 {\footnotesize (M1 7.24 → 7.56μm 등)}
+        \item 보상 RFB · CFB, 부하 CL 은 레이아웃 밖
+      \end{itemize}
+      \vspace{0.2em}
+      \begin{keybox}
+        \footnotesize \textbf{추출한 배선 기생}: 게이트 N\_AMP 1,706 fF, 출력 VREG 2,566 fF, VDD 3.54 Ω, VSS 5.35 Ω
+      \end{keybox}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{post-layout: 9개 corner 최악값}
+  \setlength{\tabcolsep}{4pt}
+  \begin{cmptable}[1.2]{H{4.2cm}R{1.85cm}R{2.0cm}R{2.0cm}R{2.0cm}}
+    \hd{스펙 (9개 corner 중 최악)} & \hd{예제 스펙} & \hd{ex09 예상\textsuperscript{*}} & \hd{pre-layout} & \hd{post-layout} \\
+    \midrule
+    드롭아웃 전압 (mV) & ≤ 250 & 213.1 & 210.7 & 213.4 \\
+    PSRR 최대 부하 10k (dB) & ≥ 14 & 18.6 & 24.1 & 18.2 \\
+    PSRR 최대 부하 1M (dB) & ≥ 9 & 11.0 & 14.8 & 10.9 \\
+    PSRR 최대 부하 >1M (dB) & ≥ −3 & −1.1 & 0.6 & −1.0 \\
+    PSRR 최소 부하 10k/1M/>1M & ≥ 10/10/12 & 12.2/12.2/19.7 & 12.4/12.4/19.8 & 12.2/12.2/19.7 \\
+    위상 여유 최대/최소 부하 (°) & ≥ 60/60 & 69.5/69.0 & 72.6/71.6 & 69.1/68.9 \\
+    \textbf{판정 (가장 빠듯한 여유)} & & 통과 (+1.90) & 통과 (+2.35) & \textbf{\color{okgreen}통과 (+1.90)} \\
+    \bottomrule
+  \end{cmptable}
+  \vspace{0.2em}
+  {\footnotesize\color{muted} * 폭 반올림 + 기생 추정. \ pre-layout = 레이아웃에 그린 폭, 기생 없음. \ post-layout = 같은 폭 + ALIGN 이 추출한 배선 R/C}
+  \vspace{0.4em}
+  \begin{itemize}\small
+    \item 기생이 PSRR(최대 부하)을 4 – 6 dB, 위상 여유를 약 3° 깎았지만 \textbf{학습 때 남겨 둔 여유 안}.
+          ex09 의 예상과 거의 같음 (기생 추정이 맞았음)
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{corner × 스펙 여유 지도: 81칸을 모두 본다}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.575\textwidth}
+      \raggedleft
+      {\small\textbf{TT 만 보고 찾은 설계} (ex08, 회로도)}\par\smallskip
+      \marginmapTT
+    \end{column}
+    \begin{column}{0.405\textwidth}
+      \raggedleft
+      {\small\textbf{PVT 학습 설계, 레이아웃 후} (ex10)}\par\smallskip
+      \marginmapPost
+    \end{column}
+  \end{columns}
+  \vspace{0.6em}
+  {\footnotesize 칸 = (값 − 예제 스펙), 10mV · 1dB · 1° 를 1 로 센 여유 \quad
+   \colorbox{accent!55}{\strut 미달} \ \colorbox{okgreen!14}{\strut 0 – 2} \ \colorbox{okgreen!34}{\strut 2 이상}\\[2pt]
+   왼쪽: \textbf{5칸 미달} (최저 −7.5, ss −40°C 최소 부하 위상 여유) \quad 오른쪽: \textbf{81칸 모두 통과} (최저 +1.9)}
+\end{frame}
+
+\begin{frame}{정말 PVT 에 강건한가?}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.56\textwidth}
+      \centering
+      \begin{tikzpicture}
+        \begin{axis}[
+            xbar, width=5.6cm, height=5.6cm, bar width=10pt,
+            xmin=-9.5, xmax=5.5, xtick={-8,-6,-4,-2,0,2,4}, xmajorgrids, grid style={draw=muted!15},
+            symbolic y coords={a,b,c,d,e,f}, ytick={a,b,c,d,e,f}, y dir=reverse, enlarge y limits=0.12,
+            yticklabels={{ex08 · TT}, {ex08 · 9 PVT}, {ex09 · 9 PVT 회로도}, {ex09 · 폭 + 기생 추정}, {ex10 · pre-layout}, {ex10 · post-layout}},
+            yticklabel style={font=\scriptsize, text=ink}, xticklabel style={font=\scriptsize},
+            xlabel={\scriptsize 가장 빠듯한 스펙의 여유 (9개 corner 최악)},
+            nodes near coords, nodes near coords style={font=\scriptsize, text=ink},
+            point meta=explicit symbolic,
+            axis x line*=bottom, axis y line*=left,
+            extra x ticks={0}, extra x tick labels={}, extra x tick style={grid=major, major grid style={draw=ink, thick}},
+          ]
+          \addplot[fill=brand!55, draw=none, bar shift=0pt] coordinates {(3.46,a) [+3.46]};
+          \addplot[fill=accent!70, draw=none, bar shift=0pt] coordinates {(-7.54,b) [−7.54]};
+          \addplot[fill=okgreen!60, draw=none, bar shift=0pt] coordinates {(2.89,c) [+2.89] (1.90,d) [+1.90] (2.35,e) [+2.35] (1.90,f) [+1.90]};
+        \end{axis}
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{0.41\textwidth}
+      \begin{keybox}
+        \boxtitle{확인한 것}
+        \footnotesize
+        \begin{itemize}\setlength{\itemsep}{1pt}
+          \item TT 만 보면 +3.46 → PVT 에서 \textbf{−7.54}
+          \item PVT + 기생 추정 학습 설계: 회로도 · 추정 · \textbf{post-layout} 모두 9개 corner 통과
+          \item seed 1 도 post-layout 통과 (+1.59)
+          \item {\color{accent}반대 사례}: 기생을 모르고 목표에 딱 붙게 학습한 이전 설계는 post-layout 위상 여유 56.8° 로 미달
+        \end{itemize}
+      \end{keybox}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{이 확인의 범위와 한계}
+  \begin{cmptable}[1.2]{H{3.2cm}L}
+    \hd{항목} & \hd{내용} \\
+    \midrule
+    예제 스펙 & 원래 벤치마크 목표보다 낮춤 (최대 부하 PSRR 10kHz 20 → 14 dB, 1MHz 이상 0 → −3 dB).
+                이 레이아웃의 기생을 넣으면 원래 값을 만족하는 설계를 찾지 못했음 \\
+    소자 모양 & ALIGN SKY130 PDK 는 1.8V 소자 모양으로 그림. 시뮬레이션은 원래 5V 모델과 원래 L 로 \\
+    보상 R/C, 부하 & 레이아웃 밖의 이상적인 소자 \\
+    기생 추출 & 블록 사이 배선만, net 마다 하나로 묶은 근사 (블록 안 배선 · 결합 C 없음) \\
+    검증 & ALIGN 자체 LVS/DRC 만 (SKY130 공식 Magic DRC / Netgen LVS 아님) \\
+    \bottomrule
+  \end{cmptable}
+  \vspace{0.5em}
+  \begin{keybox}
+    \small 그래서 이 결과는 상용 툴 수준의 sign-off 가 아니라 \textbf{“배선 기생까지 넣은 1차 확인”} 입니다.
+    그래도 TT → PVT → 레이아웃으로 갈수록 무엇이 깨지고, 학습에서 무엇을 미리 넣어야 버티는지는 그대로 보여 줍니다.
+  \end{keybox}
 \end{frame}
 
 % ==================================================
@@ -526,8 +875,6 @@ obs, reward, terminated, truncated, info = env.step(action)
     min / tt\_threshold & −6 / −1 & −6 / −1 & 보상 구간 경계 \\
     alpha & 0.1 & 0.1 \ {\footnotesize(TSA.sh 0)} & corner 편차 페널티 \\
     online\_goal & False & \textbf{True} & 범위에서 목표 뽑기 \\
-    pareto\_freq / n\_warmup & 0 / 4 & 1 / 2 \ {\footnotesize(HER 외 0)} & Pareto 샘플링 \\
-    goal\_in\_obs & True & \textbf{False} & 관측에 성능 · 목표 포함 \\
     \bottomrule
   \end{cmptable}
   \vspace{0.4em}
@@ -537,12 +884,9 @@ obs, reward, terminated, truncated, info = env.step(action)
 \begin{frame}{읽으면서 확인해볼 점}
   \begin{itemize}\small
     \item \textbf{크기 값이 정규화 없이 관측에 들어감} (예: 1.7e-05 m, 3.5e-12 F)\\
-          {\footnotesize TSA.sh처럼 \cc{goal\_in\_obs=False}면 관측이 이 7개뿐 → 신경망 입력이 거의 0. VecNormalize 등도 없음}
+          {\footnotesize 신경망 입력의 크기 7개는 거의 0. VecNormalize 등도 없음}
     \item \textbf{이산 행동이 비대칭}: \cc{action\_meaning = [-1, 0, 2]} (내릴 땐 1칸, 올릴 땐 2칸)
-    \item \textbf{보상 구간 경계가 둘}: 실제 step은 \cc{tt\_threshold}(−1), HER 재계산은 \cc{tt\_threshold\_2}(−3)\\
-          {\footnotesize 같은 상태라도 진짜 transition과 relabel된 transition의 점수 눈금이 다름}
     \item \textbf{reset()의 시뮬레이션은 집계 안 됨}: \cc{tt\_sim} / \cc{full\_sim}, callback 모두 step만 셈
-    \item \textbf{\cc{is\_dominated}가 \cc{"phm\_min"} 이름을 직접 예외 처리} → 다른 회로에 ‘한 점짜리’ spec이 있으면 따로 챙겨야 함
   \end{itemize}
   \vspace{0.2em}
   {\footnotesize\color{muted} 버그라고 단정한 것이 아니라, 의도한 설계인지 확인해 볼 만한 지점들입니다.}
@@ -554,12 +898,14 @@ obs, reward, terminated, truncated, info = env.step(action)
       \item 회로 sizing = \textbf{크기 7개를 움직여 성능 6개를 목표 이상으로} 만드는 Gymnasium 게임
       \item 보상은 계단식: \textbf{TT 실패 (−6 – −1) → corner 실패 (−1 – 0) → 합격 (+30)}
       \item 시뮬레이션이 비싸서 \textbf{SoF}로 TT부터 확인하고, 실패하면 16개 corner 생략
-      \item 목표가 매번 바뀌고, \textbf{Pareto 샘플링}으로 점점 어려운 목표를 연습
-      \item HER용 \cc{ngspice\_env\_goal}은 관측을 Dict로 바꾸고 보상을 다시 계산
+      \item 목표가 매번 바뀌어서 \textbf{처음 보는 목표}에도 쓸 수 있는 정책을 학습
+      \item \textbf{TT 만 맞춘 설계는 PVT 에서 떨어진다} → corner 최악값으로 학습 (LDO: 여유 +3.46 → −7.54)
+      \item 레이아웃 기생을 미리 추정해 넣고 여유를 두면 \textbf{post-layout 에서도 9개 corner 통과} (LDO: +1.90)
     \end{itemize}
   \end{keybox}
   \vspace{0.4em}
-  {\small 다음에 볼 곳: \cc{analog\_sizing/callbacks.py} (목표 선택, 시뮬레이션 집계), \cc{analog\_sizing/train.py} (알고리즘 설정)}
+  {\small 다음에 볼 곳: \cc{analog\_sizing/callbacks.py} (시뮬레이션 집계, 평가), \cc{analog\_sizing/train.py} (알고리즘 설정),
+   \cc{ex08} – \cc{ex10} (LDO 를 레이아웃까지), \cc{docs/MANUAL.md} 8 – 9장}
 \end{frame}
 
 \end{document}

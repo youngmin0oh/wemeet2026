@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from analog_sizing.config import benchmark_config  # noqa: E402
 from analog_sizing.envs.ngspice_env import ngspice_env_cont  # noqa: E402
 
-# 기본 예제 설계(layout/ldo_to_align.py 의 DEFAULT)를 찾을 때 쓰인 목표 스펙 (HER seed42 eval task 25)
+# 기본 예제 설계(layout/ldo_to_align.py 의 DEFAULT)를 찾을 때 쓰인 목표 스펙 (학습 seed 42, eval task 25)
 DEFAULT_TARGET = [255.318994, 21.3834079, 14.0359173, 2.83812654e-05,
                   10.5887289, 10.0905644, 15.2552415, 60.0052552, 60.0097432]
 

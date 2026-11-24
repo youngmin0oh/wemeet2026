@@ -6,7 +6,7 @@
 1. 파이썬 환경 만들기
 2. 회로 시뮬레이터 ngspice 설치하기 (관리자 권한 `sudo` 없이도 가능)
 3. 강화학습(RL)으로 아날로그 회로 크기 정하기 (sizing)
-4. 연습용 RL 예제(ex01–ex08) 돌려 보기
+4. 연습용 RL 예제(ex01–ex10) 돌려 보기
 5. RL이 정한 크기로 **레이아웃(GDS)까지 자동으로 그리기** (ALIGN)
 6. 레이아웃 기생을 넣고 **post-layout 시뮬레이션으로 9개 PVT 다시 확인하기**
 
@@ -31,8 +31,8 @@
 - [4. 파이썬 환경 만들기](#4-파이썬-환경-만들기)
 - [5. ngspice 설치](#5-ngspice-설치)
 - [6. 설치가 잘 됐는지 확인](#6-설치가-잘-됐는지-확인)
-- [7. 회로 크기 학습 돌리기 (HER / SAC)](#7-회로-크기-학습-돌리기-her--sac)
-- [8. 연습용 RL 예제 ex01–ex08 와 발표 자료](#8-연습용-rl-예제-ex01ex08-와-발표-자료)
+- [7. 회로 크기 학습 돌리기 (SAC)](#7-회로-크기-학습-돌리기-sac)
+- [8. 연습용 RL 예제 ex01–ex10 와 발표 자료](#8-연습용-rl-예제-ex01ex10-와-발표-자료)
 - [9. 레이아웃 자동 생성 (ALIGN)](#9-레이아웃-자동-생성-align)
 - [10. 자주 나는 에러와 해결법](#10-자주-나는-에러와-해결법)
 
@@ -113,8 +113,8 @@ conda activate analog_sizing
 | 패키지 | 버전 | 왜 이 버전인가 |
 |---|---|---|
 | python | 3.9.19 | |
-| gymnasium | **0.29.1** | HER 학습은 이 버전이어야 합니다 (1.x 에서는 에러, [10장](#10-자주-나는-에러와-해결법) 참고) |
-| stable-baselines3 | 2.3.2 | SAC / HER / PPO 구현 |
+| gymnasium | **0.29.1** | stable-baselines3 2.3.2 가 지원하는 범위 (`>=0.28.1, <0.30`) |
+| stable-baselines3 | 2.3.2 | SAC / PPO / DDPG 구현 |
 | torch | 2.4.0 | 신경망 |
 
 > **앞으로 터미널을 새로 열 때마다** `conda activate analog_sizing` 을 먼저 실행해야 합니다.
@@ -215,12 +215,12 @@ Episode 1 finished: step limit reached; steps=2; return=-8.166371
 자동 테스트도 돌려 봅니다.
 
 ```bash
-python -m pytest -q tests          # 25 passed 가 나오면 성공
+python -m pytest -q tests          # 24 passed 가 나오면 성공
 ```
 
 ---
 
-## 7. 회로 크기 학습 돌리기 (HER / SAC)
+## 7. 회로 크기 학습 돌리기 (SAC)
 
 ### 7-1. 들어 있는 회로
 
@@ -236,8 +236,9 @@ python -m pytest -q tests          # 25 passed 가 나오면 성공
 ```bash
 conda activate analog_sizing
 cd ~/wemeet2026
-bash scripts/TSA.sh                          # 기본: HER
-bash scripts/TSA.sh --algo SAC --seed 42     # 옵션을 뒤에 붙이면 덮어씁니다
+bash scripts/TSA.sh                          # Stable-Baselines3 SAC
+bash scripts/TSA.sh --seed 42                # 옵션을 뒤에 붙이면 덮어씁니다
+bash scripts/TSA.sh --algo PPO               # PPO, DDPG 도 고를 수 있습니다
 ```
 
 GPU가 여러 개면 `CUDA_VISIBLE_DEVICES=1 bash scripts/TSA.sh` 처럼 쓸 GPU를 고를 수 있습니다.
@@ -250,8 +251,7 @@ GPU가 여러 개면 `CUDA_VISIBLE_DEVICES=1 bash scripts/TSA.sh` 처럼 쓸 GPU
 처음 연습하거나, 공정 변화 없이 스펙만 맞추는 문제를 빨리 보고 싶을 때 씁니다.
 
 ```bash
-bash scripts/LDO.sh --tt_only True                      # HER
-bash scripts/LDO.sh --tt_only True --algo SAC
+bash scripts/LDO.sh --tt_only True
 python scripts/random_rollout.py --env LDO --tt-only    # 학습 없이 환경만 돌려 보기
 ```
 
@@ -274,27 +274,27 @@ tensorboard --logdir logs --port 6006
 브라우저에서 `http://localhost:6006` 을 엽니다. (원격 서버라면 내 PC에서 `ssh -L 6006:localhost:6006 서버주소` 로 접속한 뒤 엽니다.)
 가장 중요한 그래프는 `eval/success_rate` (평가 목표 중 모든 corner 에서 스펙을 만족한 비율) 입니다.
 
-### 7-4. HER 을 안 쓰고 SAC 만 써도 되나? (직접 비교한 결과)
+### 7-4. SAC 학습 결과 (seed 별 성공률)
 
-같은 설정에서 `--algo HER` 와 `--algo SAC` 를 seed 3개씩 돌려 마지막 `eval/success_rate` 를 비교했습니다.
+스크립트 기본 설정으로 seed 를 바꿔 돌린 뒤 마지막 `eval/success_rate` 입니다
+(이 장의 코드 정리 전에 같은 SAC 설정으로 돌린 값. 정리 뒤에는 학습 목표를 뽑는 난수 순서만 다릅니다).
 
-| 회로 | HER | SAC | 정리 |
-|---|---|---|---|
-| TSA (평가 목표 10개) | 77% | 73% | 비슷함. 초반(3000 step)은 SAC 가 더 빠름 (40% vs 23%) |
-| COMP (평가 목표 100개) | 68% | 63% | 비슷함. HER 이 seed 에 덜 흔들림 (66–72% vs 54–72%) |
-| LDO (평가 목표 100개) | 21% | 21% | 같음. 둘 다 어려워함. SAC 가 seed 에 덜 흔들림 (20–22% vs 6–35%) |
-| CMA (평가 목표 100개) | 40% (seed 42: 53%, seed 50: 26%) | 48% (seed 50) | seed 마다 크게 갈려서 판단 보류 |
+| 회로 | SAC 성공률 | 정리 |
+|---|---|---|
+| TSA (평가 목표 10개) | 73% (seed 3개 평균) | 3000 step 에서 이미 40% |
+| COMP (평가 목표 100개) | 63% (seed 3개, 54–72%) | |
+| LDO (평가 목표 100개) | 21% (seed 3개, 20–22%) | 어려운 회로 |
+| CMA (평가 목표 100개) | 14% (seed 42), 48% (seed 50) | seed 마다 크게 갈림 |
 
-- SAC 만으로도 학습은 잘 됩니다. 다만 `--algo SAC` 로 바꾸면 `train.py` 가 Pareto 목표 샘플링(`pareto_freq`)도 함께 끕니다.
-- LDO 에서 SAC 가 찾은 설계도 9개 corner 를 다시 시뮬레이션해 확인했습니다. 레이아웃 예제와 같은 목표(eval task 25)에서
-  SAC seed 123 설계는 9개 스펙을 모두 통과하고, seed 42 설계는 위상 여유 하나가 59.82° (목표 60.01°) 로 0.3% 모자랍니다.
-  찾은 크기도 HER 과 비슷합니다 (패스 소자 약 70µm × 100–110개, RFB 400Ω).
+- LDO 에서 SAC 가 찾은 설계를 9개 corner 에서 다시 시뮬레이션해 확인했습니다. 레이아웃 예제와 같은 목표(eval task 25)에서
+  seed 123 설계는 9개 스펙을 모두 통과하고, seed 42 설계는 위상 여유 하나가 59.82° (목표 60.01°) 로 0.3% 모자랍니다
+  (패스 소자 약 70µm × 100–110개, RFB 400Ω).
 - LDO 숫자 주의: 이 표를 만든 뒤 LDO 결과 해석 코드(`CircuitClass.translate_result`)에서 버그를 찾아 고쳤습니다.
   9개 corner 를 스레드로 동시에 해석하면서 중간값을 공유해, 가끔 한 corner 의 PSRR·위상 여유가 다른 corner 값으로 바뀌었습니다
   (`tests/test_ldo_parser.py`). 위 설계별 값과 9-5 의 표는 고친 코드로 다시 계산해도 같았지만, LDO 성공률(21%) 은 다시 돌리지 않은 값입니다.
 - 성공 판정(`aggregate`)은 목표 대비 위반 합이 **2% 이내면 성공**으로 칩니다. 그래서 `success=True` 설계도
   한두 스펙이 아주 조금 모자랄 수 있습니다. 위의 seed 42 설계가 그런 경우입니다.
-- LDO, CMA 는 두 방법 모두 성공률이 낮은(20–50%) 어려운 회로라 스크립트의 기본 학습 길이로는 충분히 수렴하지 않습니다.
+- LDO, CMA 는 성공률이 낮은(20–50%) 어려운 회로라 스크립트의 기본 학습 길이로는 충분히 수렴하지 않습니다.
 
 ### 7-5. 학습이 찾은 설계 꺼내 보기
 
@@ -312,54 +312,83 @@ params: [4.819 1.789 68.717 0.5 30.125 1.418 71.469 0.5 100 1.4 400 9.39e-13 4.0
 
 - 평가는 학습 중 `--eval_freq` 마다 여러 번 돌기 때문에 같은 `eval task 25` 가 로그에 여러 번 나옵니다.
   학습이 끝난 모델의 결과인 **마지막** 것을 쓰세요. `layout/ldo_to_align.py --log` 는 자동으로 마지막 것을 씁니다.
-- `success=True` 는 위반 합 2% 이내까지 포함합니다 ([7-4](#7-4-her-을-안-쓰고-sac-만-써도-되나-직접-비교한-결과)).
+- `success=True` 는 위반 합 2% 이내까지 포함합니다 ([7-4](#7-4-sac-학습-결과-seed-별-성공률)).
   `--tt_only True` 로 학습했다면 TT 에서만 확인한 결과입니다.
 
 ---
 
-## 8. 연습용 RL 예제 ex01–ex08 와 발표 자료
+## 8. 연습용 RL 예제 ex01–ex10 와 발표 자료
 
-강화학습을 처음 배우는 사람을 위한 짧은 예제입니다. 회로와 상관없는 Gymnasium 기본 환경을 씁니다.
+강화학습을 처음 배우는 사람을 위한 짧은 예제입니다. ex01–ex07 은 회로와 상관없는 Gymnasium 기본 환경을 씁니다.
+ex01–ex05 는 알고리즘을 직접 만들고, ex06 · ex07 은 같은 문제를 [Stable-Baselines3](https://stable-baselines3.readthedocs.io) 로 풉니다.
+ex08–ex10 은 그 Stable-Baselines3 SAC 를 실제 회로(LDO)에 씁니다 ([8-1](#8-1-ldo-로-처음부터-끝까지-ex08ex10)).
 
 | 파일 | 내용 | 환경 | 걸리는 시간 (참고) |
 |---|---|---|---|
-| `ex01_agent_env.py` | 에이전트–환경 주고받기 (`reset` / `step`) | CartPole | 1초 |
+| `ex01_agent_env.py` | 에이전트–환경 주고받기 (`reset` / `step`) | Pendulum · CartPole · 직접 만든 격자 | 1초 |
 | `ex02_basic_actorcritic_discrete.py` | Actor-Critic (이산 행동) | CartPole | 약 9분 |
 | `ex03_basic_actorcritic_contiuous.py` | Actor-Critic (연속 행동) | Pendulum | 약 12분 |
-| `ex04_sac.py` | SAC (replay buffer, twin Q, 자동 α) | Pendulum | 약 4분 (GPU) |
-| `ex05_ppo.py` | PPO (GAE, clipped surrogate) | Pendulum | 약 6분 (GPU) |
+| `ex04_sac.py` | SAC 직접 만들기 (replay buffer, twin Q, 자동 α) | Pendulum | 약 4분 (GPU) |
+| `ex05_ppo.py` | PPO 직접 만들기 (GAE, clipped surrogate) | Pendulum | 약 6분 (GPU) |
+| `ex06_sac_sb3.py` | ex04 를 Stable-Baselines3 `SAC` 로 (같은 하이퍼파라미터) | Pendulum | 약 2분 (GPU), 약 4분 (CPU) |
+| `ex07_ppo_sb3.py` | ex05 를 Stable-Baselines3 `PPO` 로 (같은 하이퍼파라미터) | Pendulum | 약 2분 (CPU) |
 
 ```bash
 conda activate analog_sizing
 python ex01_agent_env.py
 python ex04_sac.py
+python ex06_sac_sb3.py        # ex04 와 결과를 비교해 보세요
 ```
 
-### 8-1. LDO 로 처음부터 끝까지: ex06–ex08
+**ex04 → ex06, ex05 → ex07: 직접 만든 것이 Stable-Baselines3 의 어디에 있나**
 
-ex04 의 SAC 를 진짜 회로(LDO, SKY130)에 써서 크기를 찾고, 그 크기로 레이아웃을 그려 레이아웃 후에도 스펙을 지키는지 확인합니다.
+| 직접 만든 것 (ex04 · ex05) | Stable-Baselines3 (ex06 · ex07) |
+|---|---|
+| `ReplayBuffer` / rollout 리스트 + `compute_gae()` | 알고리즘 안에 들어 있음 (`buffer_size` / `n_steps`, `gae_lambda`) |
+| Actor, Critic(Q 두 개, V) 신경망 | `"MlpPolicy"` (크기는 `policy_kwargs=dict(net_arch=...)`) |
+| `agent.update()` 를 부르는 학습 루프 | `model.learn(total_timesteps)` |
+| α 자동 조절 / clip, K epoch, advantage 정규화 | `ent_coef="auto"` / `clip_range`, `n_epochs`, `normalize_advantage` |
+| `evaluate()`, 진행 출력 | `evaluate_policy()`, callback (`BaseCallback._on_step` 이 매 step 불림) |
+
+이 서버에서 돌린 결과 (seed 0, 평가 = 5 에피소드 평균 return, 0 에 가까울수록 좋음):
+
+| 예제 | 걸린 시간 | 학습 중 평가 return |
+|---|---|---|
+| ex06 SAC (20k step) | 107초 (GPU) | 4k −408 → 6k −144 → 10k **−98** → 20k −124 |
+| ex07 PPO (300k step) | 118초 (CPU) | 30k −599 → 40k −183 → 50k −132 → 이후 −103 ~ −315 를 오감, 300k −183 |
+
+- Pendulum 은 시작 각도마다 return 이 크게 달라서(잘 학습된 정책도 −1 ~ −350) 5 에피소드 평균은 많이 흔들립니다.
+- ex07 은 ex05 와 달리 actor 와 critic 이 learning rate 하나(3e-4)를 같이 쓰고, 행동 평균을 tanh 로 묶지 않습니다 (파일 맨 위 설명).
+- 작은 신경망의 CPU 연산은 torch 스레드 1개가 가장 빠릅니다. ex06 · ex07 · ex08–ex10 은 `torch.set_num_threads(1)` 을 씁니다.
+  기본값(코어 수만큼)으로 두면 이 서버에서 ex07 이 968초, CPU 로 돌린 ex06 은 step 당 1초 이상 걸렸습니다
+  (둘 다 ex09 학습과 같이 돌린 측정. 스레드 1개일 때도 같은 조건). GPU 로 돌릴 때는 이 설정과 상관없이 속도가 같았습니다.
+
+### 8-1. LDO 로 처음부터 끝까지: ex08–ex10
+
+ex06 의 Stable-Baselines3 SAC 를 진짜 회로(LDO, SKY130)에 써서 크기를 찾고, 그 크기로 레이아웃을 그려 레이아웃 후에도 스펙을 지키는지 확인합니다.
+SAC 코드는 ex06 과 같고(`SAC("MlpPolicy", env, ...)` → `model.learn()`), 바뀌는 것은 환경(Pendulum → ngspice 로 시뮬레이션하는 LDO)과 하이퍼파라미터뿐입니다.
 
 ```text
-ex06  TT 만 보고 SAC 로 찾기 ──> 9개 PVT 에서 확인하면 떨어짐
-ex07  9개 PVT + 레이아웃 기생 추정을 보고 SAC 로 찾기 ──> results/ex07_ldo_pvt_sac.json
-ex08  그 크기로 ALIGN 레이아웃 → 실제 배선 기생 추출 → post-layout 9개 PVT 확인
+ex08  TT 만 보고 SAC 로 찾기 ──> 9개 PVT 에서 확인하면 떨어짐
+ex09  9개 PVT + 레이아웃 기생 추정을 보고 SAC 로 찾기 ──> results/ex09_ldo_pvt_sac.json
+ex10  그 크기로 ALIGN 레이아웃 → 실제 배선 기생 추출 → post-layout 9개 PVT 확인
 ```
 
 | 파일 | 하는 일 | 걸리는 시간 (참고) |
 |---|---|---|
-| `ex06_ldo_tt_sac.py` | TT corner 만 보는 환경(`tt_only`)에서 SAC 학습 → 찾은 설계를 9개 PVT 에서 다시 시뮬레이션 | 약 2분 |
-| `ex07_ldo_pvt_sac.py` | 9개 PVT corner + 기생 추정 넷리스트로 SAC 학습 → 회로도 / 기생 추정 두 경우로 확인 | 약 25–50분 (서버 부하에 따라) |
-| `ex08_ldo_layout_postlayout.py` | ex07 설계로 ALIGN 레이아웃 → 기생 추출 → post-layout 9개 PVT 판정 (ALIGN 필요, [9-1](#9-1-align-설치-약-25분-한-번만)) | 약 5분 |
-| `ex_ldo_common.py` | 세 예제가 같이 쓰는 것: 예제 스펙, 환경 만들기, SAC 학습, 9개 corner 표 출력 | |
+| `ex08_ldo_tt_sac.py` | TT corner 만 보는 환경(`tt_only`)에서 SAC 학습 → 찾은 설계를 9개 PVT 에서 다시 시뮬레이션 | 약 2분 |
+| `ex09_ldo_pvt_sac.py` | 9개 PVT corner + 기생 추정 넷리스트로 SAC 학습 → 회로도 / 기생 추정 두 경우로 확인 | 약 25–50분 (서버 부하에 따라) |
+| `ex10_ldo_layout_postlayout.py` | ex09 설계로 ALIGN 레이아웃 → 기생 추출 → post-layout 9개 PVT 판정 (ALIGN 필요, [9-1](#9-1-align-설치-약-25분-한-번만)) | 약 5분 |
+| `ex_ldo_common.py` | 세 예제가 같이 쓰는 것: 예제 스펙, 환경 만들기, 학습 기록 callback(`DesignLog`), 9개 corner 표 출력 | |
 
 ```bash
 conda activate analog_sizing
-python ex06_ldo_tt_sac.py
-python ex07_ldo_pvt_sac.py
-python ex08_ldo_layout_postlayout.py
+python ex08_ldo_tt_sac.py
+python ex09_ldo_pvt_sac.py
+python ex10_ldo_layout_postlayout.py
 ```
 
-결과는 `results/` (json) 와 `layout/work/ex08_ldo/` (GDS, PNG, post-layout 넷리스트) 에 생깁니다.
+결과는 `results/` (json) 와 `layout/work/ex10_ldo/` (GDS, PNG, post-layout 넷리스트) 에 생깁니다.
 
 **예제 스펙** (`ex_ldo_common.py` 의 `SPEC`). 레이아웃 후에도 9개 corner 모두에서 지켜야 하는 값입니다.
 
@@ -379,19 +408,19 @@ python ex08_ldo_layout_postlayout.py
 그래서 이 레이아웃 흐름으로 실제 만들 수 있는 수준으로 예제 스펙을 정했습니다. 실제 설계라면 이 단계에서 스펙을 조정하거나, 레이아웃을 바꿉니다(넓은 전원선, 게이트 배선 위치).
 ALIGN 추출은 배선 C 를 모두 접지로 잡아서(옆 VDD 선과의 결합을 무시) 실제보다 나쁘게 보는 쪽이라는 점도 함께 알아 두세요.
 
-**ex07 의 두 가지 장치**
+**ex09 의 두 가지 장치**
 
 1. **기생 추정 넣고 학습 (parasitic-aware)**: `ex_ldo_common.parasitic_aware_yaml()` 이 9개 corner 넷리스트에
-   게이트 배선 C(`{0.11f x W_pass x M_pass}` 를 π 모델로 양쪽에)와 VDD R 3.5Ω 을 넣은 복사본을 `results/ex07_netlists/` 에 만듭니다.
+   게이트 배선 C(`{0.11f x W_pass x M_pass}` 를 π 모델로 양쪽에)와 VDD R 3.5Ω 을 넣은 복사본을 `results/ex09_netlists/` 에 만듭니다.
 2. **여유를 둔 학습 목표**: 학습 목표 = 예제 스펙 + `TRAIN_MARGIN` (Vdrop 5mV, PSRR 1dB, 위상 여유 1.5°).
    기생 추정이 실제와 조금 달라도 버티게 합니다.
 
-비교해 보고 싶으면 `python ex07_ldo_pvt_sac.py --no_parasitic` (기생 추정 없이) 이나 `--no_margin` (여유 없이) 으로 학습한 뒤
-`python ex08_ldo_layout_postlayout.py` 로 확인해 보세요.
+비교해 보고 싶으면 `python ex09_ldo_pvt_sac.py --no_parasitic` (기생 추정 없이) 이나 `--no_margin` (여유 없이) 으로 학습한 뒤
+`python ex10_ldo_layout_postlayout.py` 로 확인해 보세요.
 
-**이 서버에서 돌린 결과** (기본값, seed 0)
+**이 서버에서 돌린 결과** (기본값, seed 0. 정리한 코드로 다시 돌려도 설계와 숫자가 모두 같았습니다)
 
-ex06 — 106초, 시뮬레이션 257번. TT 에서 성공한 설계 30개 중 TT 여유가 가장 큰 설계(TT 에서 여유 +3.5)를 9개 PVT 에서 다시 보면:
+ex08 — 93초, 시뮬레이션 257번. TT 에서 성공한 설계 30개 중 TT 여유가 가장 큰 설계(TT 에서 여유 +3.5)를 9개 PVT 에서 다시 보면:
 
 ```text
 [같은 설계 -> 9개 PVT corner 에서]  9개 corner 중 최악값
@@ -402,17 +431,17 @@ ex06 — 106초, 시뮬레이션 257번. TT 에서 성공한 설계 30개 중 TT
   => 9개 corner 미달 4개 (가장 빠듯한 여유 -7.54)
 ```
 
-ex07 — 35분, corner 시뮬레이션 15,521번, 첫 성공 980 step. 성공한 설계 30개를 **ALIGN 이 그릴 폭(fin 0.21µm 격자로 반올림) + 기생 추정**
+ex09 — 35분, corner 시뮬레이션 15,521번, 첫 성공 980 step. 성공한 설계 30개를 **ALIGN 이 그릴 폭(fin 0.21µm 격자로 반올림) + 기생 추정**
 으로 다시 시뮬레이션해 여유가 가장 큰 설계를 골랐습니다.
 
 ```text
 W_M1=7.237  L_M1=1.801  W_M3=100  L_M3=0.5  W_M5=55.03  L_M5=0.5  W_pass=38.4  L_pass=0.5  M_pass=200  Vb=1.4  RFB=2558  CFB=2.906e-12  CL=5.5e-10
 ```
 
-ex08 — 레이아웃 106초 (213.3 x 219.4 µm, ALIGN 자체 LVS/DRC 오류 0). 추출한 기생은 게이트 배선 C 0.222 fF/µm (ex07 추정 0.22),
+ex10 — 레이아웃 102초 (213.3 x 219.4 µm, ALIGN 자체 LVS/DRC 오류 0). 추출한 기생은 게이트 배선 C 0.222 fF/µm (ex09 추정 0.22),
 VDD R 3.54 Ω (추정 3.5) 로 추정과 거의 같았습니다.
 
-| 스펙 (9개 corner 중 최악) | 예제 스펙 | ex07 의 예상 (레이아웃 폭 + 기생 추정) | ex08 pre-layout | ex08 post-layout |
+| 스펙 (9개 corner 중 최악) | 예제 스펙 | ex09 의 예상 (레이아웃 폭 + 기생 추정) | ex10 pre-layout | ex10 post-layout |
 |---|---|---|---|---|
 | 드롭아웃 전압 (mV) | ≤ 250 | 213.1 | 210.7 | 213.4 |
 | PSRR 최대 부하 10kHz (dB) | ≥ 14 | 18.6 | 24.1 | 18.2 |
@@ -424,29 +453,34 @@ VDD R 3.54 Ω (추정 3.5) 로 추정과 거의 같았습니다.
 
 여유 = 가장 빠듯한 스펙의 (값 − 스펙), 10mV · 1dB · 1° 를 1 로 센 값입니다.
 
-![ex08 이 만든 LDO 레이아웃](img/ex08_ldo_layout.png)
+![ex10 이 만든 LDO 레이아웃](img/ex10_ldo_layout.png)
 
-- seed 1 로도 해 봤습니다: ex07 26분, ex08 post-layout 9개 corner 통과 (여유 +1.59, ex07 예상 +1.89).
-- GPU 연산이 매번 똑같지는 않아서 같은 seed 라도 ex07 이 고르는 설계는 실행마다 조금 다를 수 있습니다 (ex06 은 매번 같았습니다).
+- seed 1 로도 해 봤습니다: ex09 26분, ex10 post-layout 9개 corner 통과 (여유 +1.59, ex09 예상 +1.89).
+- GPU 연산이 매번 똑같지는 않아서 같은 seed 라도 ex09 가 고르는 설계는 실행마다 조금 다를 수 있습니다 (ex08 은 매번 같았습니다).
 - 비교: 9-5 의 기본 예제 설계(기생을 모르고 학습, 목표에 딱 붙은 설계)는 이 예제 스펙으로 봐도 post-layout 위상 여유 56.8° 로 떨어집니다.
-- ex08 은 트랜지스터 L 을 원래 값으로 시뮬레이션합니다 (ALIGN 이 그린 0.15µm x stack 게이트는 5V 모델 범위 밖, [9-0](#9-0-먼저-알아-둘-점-중요)).
+- ex10 은 트랜지스터 L 을 원래 값으로 시뮬레이션합니다 (ALIGN 이 그린 0.15µm x stack 게이트는 5V 모델 범위 밖, [9-0](#9-0-먼저-알아-둘-점-중요)).
 
 이 예제를 만들면서 고친 것:
 
 - 환경이 음수 목표(예: "1MHz 이상 PSRR ≥ −3 dB")를 반대 방향으로 판정하던 문제 (`lookup` 이 목표의 부호를 그대로 나눗셈에 씀)
-- LDO 결과 해석이 9개 corner 사이에서 값을 섞던 문제 ([7-4](#7-4-her-을-안-쓰고-sac-만-써도-되나-직접-비교한-결과) 의 주의 참고)
+- LDO 결과 해석이 9개 corner 사이에서 값을 섞던 문제 ([7-4](#7-4-sac-학습-결과-seed-별-성공률) 의 주의 참고)
 - 폭 반올림: 모델 최대 폭(100µm) 을 넘지 않게, 큰 배열은 X x Y 로 나눌 수 있는 단위 셀 수로 ([10장](#10-자주-나는-에러와-해결법) 의 AspectRatio 항목)
 
-발표 자료(PDF)는 `slides/` 에 있습니다.
+발표 자료는 `slides/` 에 있습니다.
 
+- `slides/rl_ex01_10_lecture.pptx` : ex01–ex10 강의 자료 (처음 배우는 사람용. 비유와 그림 위주, 쪽마다 발표자 노트)
 - `slides/rl_ex01_05.pdf` : ex01→ex05 에서 무엇이 바뀌는지
-- `slides/analog_sizing_envs.pdf` : `analog_sizing/envs` 가 어떻게 동작하는지
+- `slides/analog_sizing_envs.pdf` : `analog_sizing/envs` 가 어떻게 동작하는지, TT 와 PVT(공정 · 전압 · 온도) 가 무엇이고 왜 봐야 하는지,
+  TSA · LDO 스펙의 뜻, LDO 를 ex08–ex10 으로 레이아웃 · post-layout 까지 확인한 결과
+- `slides/analog_sizing_envs.pptx` : 위 PDF 와 같은 내용의 PowerPoint (표 · 도형 · 차트를 PowerPoint 에서 바로 고칠 수 있음)
 
 고쳐서 다시 만들려면 (TeX Live 의 xelatex 필요, 글꼴은 `slides/fonts/` 에 포함):
 
 ```bash
 cd slides && xelatex rl_ex01_05.tex && xelatex rl_ex01_05.tex
 ```
+
+`analog_sizing_envs.tex` 는 레이아웃 그림 `docs/img/ex10_ldo_layout.png` 와 여유 지도 `slides/ldo_margin_maps.tex` 를 함께 씁니다.
 
 ---
 
@@ -523,7 +557,7 @@ bash layout/run_ldo_layout.sh
 | 3/4 | ALIGN 자동 배치 · 배선 → GDS | `schematic2layout.py` |
 | 4/4 | GDS → PNG 그림 | `layout/gds_to_png.py` |
 
-기본값은 이 저장소에서 HER 학습(seed 42)이 찾은, **9개 corner 를 모두 통과한 LDO 설계** 입니다. 내 학습 결과로 바꾸려면:
+기본값은 이 저장소의 9개 corner 학습(seed 42, 평가 목표 25번)이 찾은, **9개 corner 를 모두 통과한 LDO 설계** 입니다. 내 학습 결과로 바꾸려면:
 
 ```bash
 # 학습 로그에서 success=True 인 eval task 번호를 골라서
@@ -699,11 +733,10 @@ python layout/postlayout_ldo.py --align_dir layout/work/ldo_rl
 | `conda: command not found` | conda 미설치 또는 터미널을 다시 안 엶 | [2장](#2-conda-설치-이미-있으면-건너뛰기) 후 터미널 재시작 |
 | `ngspice: command not found` / `FileNotFoundError: 'ngspice'` | ngspice 미설치 또는 환경을 안 켬 | `conda activate analog_sizing` 후 [5장](#5-ngspice-설치) |
 | 학습이 이상하게 느림 (fps 0–1), CPU 가 꽉 참 | ngspice 스레드 과다 | 저장소 맨 위 폴더에서 실행했는지, `.spiceinit` 이 있는지 확인 ([5-1](#5-1-꼭-확인-스레드-설정-파일-spiceinit)) |
-| `AttributeError: 'Monitor' object has no attribute 'compute_reward'` (HER, 약 120 step 에서) | gymnasium 1.x 가 깔려 있음 | `pip install gymnasium==0.29.1` |
 | `CUDA error: no kernel image is available for execution on the device` | torch 가 GPU 세대를 모름 (RTX 50xx 등) | [4-2](#4-2-gpu가-rtx-50xx--blackwell-계열일-때만-torch-바꾸기) |
 | `ModuleNotFoundError: No module named 'tqdm'` | 예제용 패키지 없음 | `pip install tqdm` |
 | `ngspice failed ... could not find a valid modelname` | 트랜지스터 L/W 가 모델 범위 밖 (예: SKY130 5V 소자 L < 0.5um) | 크기를 yaml 의 범위 안으로 |
 | 특정 seed 만 극단적으로 느림 | 일부 설계에서 transient 시뮬레이션 하나가 수십 초 걸림 (타임아웃 없음) | 정상 동작. 기다리거나 다른 seed 사용 |
 | `[실패] ALIGN 이 레이아웃을 끝내지 못했습니다` + `conflict between: {"constraint": "AspectRatio" ...` | 큰 소자의 단위 셀 수 m 을 X x Y 로 나눌 수 없어(예: 1514 = 2 x 757) 띠 모양으로만 놓임 | `layout/ldo_to_align.py` 가 오차 2% 안에서 나누기 좋은 m 을 고릅니다(1514 -> 1512 = 36 x 42). 그래도 실패하면 `ldo_to_align.py` 의 `AspectRatio` 범위(0.5–2.0)를 넓혀 보세요 |
-| ex07 이 `목표를 만족한 설계가 없습니다` 로 끝남 | 정해진 step 안에 성공 설계를 못 찾음 | `--steps 20000` 처럼 늘리거나 `--seed` 를 바꿔 다시 |
-| ex08 결과가 `레이아웃 후 미달` | 레이아웃 기생이나 폭 반올림이 ex07 의 여유보다 큼 | `ex07_ldo_pvt_sac.py` 의 `TRAIN_MARGIN` 을 키우거나 다른 seed 로 다시 학습 |
+| ex09 가 `목표를 만족한 설계가 없습니다` 로 끝남 | 정해진 step 안에 성공 설계를 못 찾음 | `--steps 20000` 처럼 늘리거나 `--seed` 를 바꿔 다시 |
+| ex10 결과가 `레이아웃 후 미달` | 레이아웃 기생이나 폭 반올림이 ex09 의 여유보다 큼 | `ex09_ldo_pvt_sac.py` 의 `TRAIN_MARGIN` 을 키우거나 다른 seed 로 다시 학습 |

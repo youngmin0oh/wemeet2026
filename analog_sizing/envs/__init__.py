@@ -1,1 +1,1 @@
-"""Continuous, discrete, and goal-conditioned circuit environments."""
+"""Continuous and discrete circuit-sizing environments."""

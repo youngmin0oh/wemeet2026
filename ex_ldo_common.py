@@ -1,9 +1,9 @@
 """
-ex06 · ex07 · ex08 이 같이 쓰는 도구 (LDO, SKY130)
+ex08 · ex09 · ex10 이 같이 쓰는 도구 (LDO, SKY130)
 
     SPEC                  예제 스펙 (레이아웃 후에도 9개 PVT corner 에서 지켜야 하는 값)
     make_env()            Gymnasium 환경 (TT 만 / 9개 PVT, 기생 추정 포함 여부)
-    train_sac()           Stable-Baselines3 SAC 학습 + 성공한 설계 기록
+    DesignLog             Stable-Baselines3 callback: 학습 중 목표를 만족한 설계를 기록
     Simulator             설계 하나를 9개 corner 에서 시뮬레이션
     print_pvt_table()     corner 별 최악값을 스펙과 나란히 출력
 
@@ -26,7 +26,12 @@ from pathlib import Path
 
 import gymnasium as gym
 import numpy as np
+import torch
+from stable_baselines3.common.callbacks import BaseCallback
 from tqdm import tqdm
+
+# 신경망의 CPU 연산은 스레드 1개로: 시뮬레이션(ngspice 9개)과 CPU 를 나눠 쓰고, 작은 신경망은 이쪽이 더 빠르다
+torch.set_num_threads(1)
 
 REPO = Path(__file__).resolve().parent
 sys.path.insert(0, str(REPO))
@@ -216,48 +221,37 @@ def print_pvt_table(title, table, corners, extra=None):
 
 
 # ==================================================
-# SAC 학습
+# 학습 기록 (Stable-Baselines3 callback)
 # ==================================================
-def train_sac(env, total_steps, seed=0, stop_after=None, desc="SAC"):
-    """Stable-Baselines3 SAC 로 학습한다 (ex04 에서 직접 만든 SAC 와 같은 알고리즘).
-    학습 중 성공(terminated)한 설계를 모두 기록해서 돌려준다. stop_after 개를 모으면 일찍 멈춘다.
-    -> (model, 성공한 설계 목록, 학습 중 돌린 corner 시뮬레이션 수)"""
-    import torch
-    from stable_baselines3 import SAC
-    from stable_baselines3.common.callbacks import BaseCallback
+class DesignLog(BaseCallback):
+    """model.learn(callback=DesignLog(...)) 로 붙인다. 매 step 불려서
+      - 진행바를 보여 주고
+      - 시뮬레이션 수를 센다 (TT 만 본 step = 1번, TT 를 통과해 나머지 corner 까지 본 step = corner 수)
+      - 목표를 만족한(terminated) 설계를 모두 기록한다 (found)
+    stop_after 개를 모으면 False 를 돌려준다 -> SB3 가 학습을 멈춘다."""
 
-    base = env.unwrapped
+    def __init__(self, env, total_steps, stop_after=None, desc="SAC"):
+        super().__init__()
+        self.base = env.unwrapped
+        self.total_steps, self.stop_after, self.desc = total_steps, stop_after, desc
+        self.found, self.sims = [], 0
 
-    class DesignLog(BaseCallback):
-        def __init__(self):
-            super().__init__()
-            self.found, self.sims = [], 0
-            self.bar = tqdm(total=total_steps, desc=desc, unit="step", dynamic_ncols=True)
+    def _on_training_start(self):
+        self.bar = tqdm(total=self.total_steps, desc=self.desc, unit="step", dynamic_ncols=True)
 
-        def _on_step(self):
-            info = self.locals["infos"][0]
-            self.bar.update(1)
-            # TT 만 본 step 은 1번, TT 를 통과해서 나머지 corner 까지 본 step 은 corner 수만큼
-            self.sims += base.num_corners if (info.get("tt_done") and not base.tt_only) else 1
-            if info.get("done"):                       # 이 step 에서 목표 달성
-                self.found.append({"step": int(self.num_timesteps),
-                                   "params": [float(x) for x in info["params"]],
-                                   "specs": [float(x) for x in info["cur_specs"]]})
-                self.bar.set_postfix(found=len(self.found), first=self.found[0]["step"])
-            return not (stop_after and len(self.found) >= stop_after)
+    def _on_step(self):
+        info = self.locals["infos"][0]
+        self.bar.update(1)
+        self.sims += self.base.num_corners if (info.get("tt_done") and not self.base.tt_only) else 1
+        if info.get("done"):                       # 이 step 에서 목표 달성
+            self.found.append({"step": int(self.num_timesteps),
+                               "params": [float(x) for x in info["params"]],
+                               "specs": [float(x) for x in info["cur_specs"]]})
+            self.bar.set_postfix(found=len(self.found), first=self.found[0]["step"])
+        return not (self.stop_after and len(self.found) >= self.stop_after)
 
-        def _on_training_end(self):
-            self.bar.close()
-
-    torch.manual_seed(seed)
-    model = SAC(
-        "MlpPolicy", env, seed=seed, verbose=0,
-        learning_rate=3e-3, gamma=0.8, batch_size=256, tau=0.005, learning_starts=120,
-        policy_kwargs=dict(net_arch=dict(pi=[256, 256, 256, 256], qf=[256, 256, 128])),
-    )   # scripts/LDO.sh 와 같은 하이퍼파라미터
-    log = DesignLog()
-    model.learn(total_timesteps=total_steps, callback=log)
-    return model, log.found, log.sims
+    def _on_training_end(self):
+        self.bar.close()
 
 
 def rollout(model, env):

@@ -1,22 +1,22 @@
 """
-ex08 — ex07 에서 찾은 LDO 크기로 ALIGN 레이아웃 -> 레이아웃 후(post-layout) 9개 PVT corner 확인
-conda activate analog_sizing ; python ex08_ldo_layout_postlayout.py        (약 5분)
+ex10 — ex09 에서 찾은 LDO 크기로 ALIGN 레이아웃 -> 레이아웃 후(post-layout) 9개 PVT corner 확인
+conda activate analog_sizing ; python ex10_ldo_layout_postlayout.py        (약 5분)
 필요: ALIGN 설치 (docs/MANUAL.md 9-1, conda 환경 align + ALIGN-pdk-sky130)
 
 단계
-  1. results/ex07_ldo_pvt_sac.json 의 파라미터 13개를 읽는다
+  1. results/ex09_ldo_pvt_sac.json 의 파라미터 13개를 읽는다
   2. layout/run_ldo_layout.sh 로 ALIGN 자동 배치·배선 -> GDS, PNG, 배선 기생 추출(.cir)
        (트랜지스터 폭은 ALIGN 격자(fin 0.21um)에 맞춰 반올림, 보상 R/C 와 부하 C 는 레이아웃 밖)
   3. 추출 결과에서 net 마다 배선 R/C 를 구한다 (layout/postlayout_ldo.py)
-     -> ex07 이 학습에 쓴 기생 추정값(게이트 배선 C, VDD R)과 비교
+     -> ex09 가 학습에 쓴 기생 추정값(게이트 배선 C, VDD R)과 비교
   4. 9개 corner 넷리스트에 실제 기생을 넣은 post-layout 넷리스트를 만든다
   5. pre-layout(레이아웃에 쓴 폭, 기생 없음) 과 post-layout 을 9개 corner 에서 시뮬레이션해
      예제 스펙(ex_ldo_common.SPEC)을 모두 지키는지 판정한다
 
-    python ex08_ldo_layout_postlayout.py --skip_layout      # 레이아웃은 그대로 두고 4-5 단계만 다시
-    python ex08_ldo_layout_postlayout.py --result results/ex06_ldo_tt_sac.json   # ex06 설계로 해 보기
+    python ex10_ldo_layout_postlayout.py --skip_layout      # 레이아웃은 그대로 두고 4-5 단계만 다시
+    python ex10_ldo_layout_postlayout.py --result results/ex08_ldo_tt_sac.json   # ex08 설계로 해 보기
 
-결과: results/ex08_ldo_postlayout.json, 레이아웃 그림 layout/work/ex08_ldo/ex08_ldo.png
+결과: results/ex10_ldo_postlayout.json, 레이아웃 그림 layout/work/ex10_ldo/ex10_ldo.png
 """
 import argparse
 import json
@@ -64,8 +64,8 @@ def layout_params(adir):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--result", default=str(RESULTS / "ex07_ldo_pvt_sac.json"), help="ex06/ex07 결과 json")
-    ap.add_argument("--name", default="ex08_ldo", help="레이아웃 폴더 이름 (layout/work/<name>)")
+    ap.add_argument("--result", default=str(RESULTS / "ex09_ldo_pvt_sac.json"), help="ex08/ex09 결과 json")
+    ap.add_argument("--name", default="ex10_ldo", help="레이아웃 폴더 이름 (layout/work/<name>)")
     ap.add_argument("--skip_layout", action="store_true", help="이미 만든 레이아웃을 다시 쓴다")
     a = ap.parse_args()
 
@@ -98,7 +98,7 @@ def main():
         print(f"    {n:8s} C {nets[n]['C']:8.1f} fF   R {r_dist:7.2f} ohm")
     w_pass_total = q["layout_W_um"]["M6"]
     c_per_um = par.get("N_AMP", (0, 0))[1] / w_pass_total
-    print(f"    ex07 의 추정과 비교: 게이트 배선 C {c_per_um:.3f} fF/um (추정 {C_NAMP_FF_PER_UM}), "
+    print(f"    ex09 의 추정과 비교: 게이트 배선 C {c_per_um:.3f} fF/um (추정 {C_NAMP_FF_PER_UM}), "
           f"VDD R {par.get('VDD', (0, 0))[0]:.2f} ohm (추정 {R_VDD_OHM})")
 
     # 4. post-layout 넷리스트
@@ -127,11 +127,11 @@ def main():
     else:
         bad = [SPEC[i][4] for i in np.where(~passes(worst(tables["post-layout"])[0]))[0]]
         print(f"\n=> 레이아웃 후 미달: {', '.join(bad)}"
-              "\n   ex07 의 TRAIN_MARGIN 이나 기생 추정값(ex_ldo_common.C_NAMP_FF_PER_UM, R_VDD_OHM)을 키워 다시 학습하세요.")
+              "\n   ex09 의 TRAIN_MARGIN 이나 기생 추정값(ex_ldo_common.C_NAMP_FF_PER_UM, R_VDD_OHM)을 키워 다시 학습하세요.")
 
     png = adir / f"{a.name}.png"
-    path = save_json(RESULTS / "ex08_ldo_postlayout.json", {
-        "example": "ex08: ALIGN layout + post-layout PVT check",
+    path = save_json(RESULTS / "ex10_ldo_postlayout.json", {
+        "example": "ex10: ALIGN layout + post-layout PVT check",
         "design_from": a.result,
         "params": dict(zip(names, params)),
         "layout_params": dict(zip(names, lay_params)),
