@@ -6,7 +6,7 @@
 1. 파이썬 환경 만들기
 2. 회로 시뮬레이터 ngspice 설치하기 (관리자 권한 `sudo` 없이도 가능)
 3. 강화학습(RL)으로 아날로그 회로 크기 정하기 (sizing)
-4. 연습용 RL 예제(ex01–ex10) 돌려 보기
+4. 연습용 RL 예제(ex00–ex10) 돌려 보기
 5. RL이 정한 크기로 **레이아웃(GDS)까지 자동으로 그리기** (ALIGN)
 6. 레이아웃 기생을 넣고 **post-layout 시뮬레이션으로 9개 PVT 다시 확인하기**
 
@@ -32,7 +32,7 @@
 - [5. ngspice 설치](#5-ngspice-설치)
 - [6. 설치가 잘 됐는지 확인](#6-설치가-잘-됐는지-확인)
 - [7. 회로 크기 학습 돌리기 (SAC)](#7-회로-크기-학습-돌리기-sac)
-- [8. 연습용 RL 예제 ex01–ex10 와 발표 자료](#8-연습용-rl-예제-ex01ex10-와-발표-자료)
+- [8. 연습용 RL 예제 ex00–ex10 와 발표 자료](#8-연습용-rl-예제-ex00ex10-와-발표-자료)
 - [9. 레이아웃 자동 생성 (ALIGN)](#9-레이아웃-자동-생성-align)
 - [10. 자주 나는 에러와 해결법](#10-자주-나는-에러와-해결법)
 
@@ -317,14 +317,17 @@ params: [4.819 1.789 68.717 0.5 30.125 1.418 71.469 0.5 100 1.4 400 9.39e-13 4.0
 
 ---
 
-## 8. 연습용 RL 예제 ex01–ex10 와 발표 자료
+## 8. 연습용 RL 예제 ex00–ex10 와 발표 자료
 
-강화학습을 처음 배우는 사람을 위한 짧은 예제입니다. ex01–ex07 은 회로와 상관없는 Gymnasium 기본 환경을 씁니다.
+강화학습을 처음 배우는 사람을 위한 짧은 예제입니다.
+ex00 은 학습 없이 이 저장소가 푸는 회로 환경(LDO)을 둘러봅니다: `reset()` · `step()` 이 회로에서 무엇인지, 관측 31개 · 행동 13개 · 보상, 9개 PVT corner.
+ex01–ex07 은 회로와 상관없는 Gymnasium 기본 환경을 씁니다.
 ex01–ex05 는 알고리즘을 직접 만들고, ex06 · ex07 은 같은 문제를 [Stable-Baselines3](https://stable-baselines3.readthedocs.io) 로 풉니다.
 ex08–ex10 은 그 Stable-Baselines3 SAC 를 실제 회로(LDO)에 씁니다 ([8-1](#8-1-ldo-로-처음부터-끝까지-ex08ex10)).
 
 | 파일 | 내용 | 환경 | 걸리는 시간 (참고) |
 |---|---|---|---|
+| `ex00_circuit_env.py` | 회로 환경 둘러보기 (학습 없음): 관측 · 행동 · 보상, 9개 PVT corner | LDO (ngspice) | 약 5초 |
 | `ex01_agent_env.py` | 에이전트–환경 주고받기 (`reset` / `step`) | Pendulum · CartPole · 직접 만든 격자 | 1초 |
 | `ex02_basic_actorcritic_discrete.py` | Actor-Critic (이산 행동) | CartPole | 약 9분 |
 | `ex03_basic_actorcritic_contiuous.py` | Actor-Critic (연속 행동) | Pendulum | 약 12분 |
@@ -335,6 +338,7 @@ ex08–ex10 은 그 Stable-Baselines3 SAC 를 실제 회로(LDO)에 씁니다 ([
 
 ```bash
 conda activate analog_sizing
+python ex00_circuit_env.py      # 회로 환경 둘러보기 (학습 없음, 약 5초)
 python ex01_agent_env.py
 python ex04_sac.py
 python ex06_sac_sb3.py        # ex04 와 결과를 비교해 보세요

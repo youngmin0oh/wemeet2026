@@ -1,38 +1,47 @@
-# Analog Circuit Sizing
+# Analog Circuit Sizing (아날로그 회로 크기 정하기)
 
-Gymnasium environments for sizing analog circuits with ngspice, with continuous
-or discrete actions. Training uses Stable-Baselines3 SAC (default), PPO, or DDPG.
+ngspice 로 시뮬레이션하는 아날로그 회로의 크기(트랜지스터 폭 · 길이, 커패시터 등)를 강화학습으로 찾는
+Gymnasium 환경입니다. 행동은 연속 또는 이산으로 고를 수 있고, 학습은 Stable-Baselines3 의
+SAC(기본), PPO, DDPG 를 씁니다.
 
-| Benchmark | Circuit | Process |
+| 벤치마크 | 회로 | 공정 |
 | --- | --- | --- |
-| TSA | Two-stage amplifier | GF180 |
-| CMA | Cascode Miller-compensated amplifier | GF180 |
-| LDO | Low-dropout regulator | SKY130 |
-| COMP | Comparator | GF180 |
+| TSA | 2단 증폭기 (Two-stage amplifier) | GF180 |
+| CMA | 캐스코드 밀러 보상 증폭기 (Cascode Miller-compensated amplifier) | GF180 |
+| LDO | 저전압 강하 레귤레이터 (Low-dropout regulator) | SKY130 |
+| COMP | 비교기 (Comparator) | GF180 |
 
-## Setup
+> 처음이라면 단계별 매뉴얼 [docs/MANUAL.md](docs/MANUAL.md) 를 따라 하세요.
+> ngspice 설치, GPU 별 torch, 학습, 연습 예제 ex00–ex10, ALIGN 자동 레이아웃까지 다룹니다.
+> 강의 자료는 [slides/rl_ex01_10_lecture.pptx](slides/rl_ex01_10_lecture.pptx) 에 있습니다.
 
-> 처음 설치한다면 단계별 한국어 매뉴얼 [docs/MANUAL.md](docs/MANUAL.md) 를 따라 하세요
-> (ngspice 설치, GPU 별 torch, 학습, 연습 예제, ALIGN 자동 레이아웃까지).
+## 설치
 
 ```bash
 conda env create -f environment.yml
 conda activate analog_sizing
-conda install -c conda-forge ngspice   # or: sudo apt-get install ngspice
+conda install -c conda-forge ngspice   # 또는: sudo apt-get install ngspice
 ```
 
-Run commands from the repository root so ngspice picks up the bundled `.spiceinit`
-(`set num_threads=1`). Without it, ngspice builds that default to several OpenMP
-threads oversubscribe the CPU when 16 corners run in parallel (179 s vs 0.27 s per
-TSA corner sweep on our server).
+명령은 저장소 맨 위 폴더에서 실행하세요. 그래야 ngspice 가 함께 들어 있는 `.spiceinit`
+(`set num_threads=1`) 을 읽습니다. 이 파일이 없으면 OpenMP 스레드를 여러 개 쓰도록 빌드된 ngspice 가
+corner 16개를 동시에 돌릴 때 CPU 를 서로 차지하려고 다퉈서 크게 느려집니다
+(이 서버에서 TSA 의 corner 전체를 한 번 돌리는 데 179초 vs 0.27초).
 
-Model paths are resolved from the source netlists when simulations run. No input
-file rewriting is required. Keep the bundled PDK files in `eval_engines/pdk/`.
-Training uses Gymnasium 0.29.1 with Stable-Baselines3 2.3.2, as pinned above.
+회로 모델(PDK) 경로는 시뮬레이션할 때 원본 넷리스트에서 찾으므로 입력 파일을 고칠 필요가 없습니다.
+함께 들어 있는 PDK 파일은 `eval_engines/pdk/` 에 그대로 두세요.
+학습에는 위 `environment.yml` 에 고정된 Gymnasium 0.29.1 과 Stable-Baselines3 2.3.2 를 씁니다.
 
-## Try the environment
+## 환경 직접 만져 보기
 
-Run a short rollout with randomly sampled actions:
+가장 쉬운 방법은 LDO 회로 환경을 둘러보는 예제입니다 (학습 없음, 약 5초).
+관측 · 행동 · 보상이 회로에서 무엇인지, 같은 크기가 9개 PVT corner 에서 어떻게 달라지는지 한국어로 보여 줍니다.
+
+```bash
+python ex00_circuit_env.py
+```
+
+무작위 행동으로 몇 step 돌려 보며 숫자를 모두 출력할 수도 있습니다:
 
 ```bash
 python scripts/random_rollout.py --env TSA --episodes 1 --steps 2 --seed 0
@@ -40,8 +49,8 @@ python scripts/random_rollout.py --env TSA --action-space discrete --steps 2
 python scripts/random_rollout.py --env LDO --steps 2 --tt-only
 ```
 
-The continuous command above produces the following complete output with the
-bundled TSA netlist and seed 0. It includes reset and both sampled steps.
+첫 번째 명령(TSA, 연속 행동, seed 0)은 아래를 그대로 출력합니다. reset 과 무작위 step 두 번이 모두 들어 있습니다.
+(프로그램이 실제로 찍는 내용이라 영어 그대로 둡니다.)
 
 ```text
 Environment: TSA | actions=continuous | seed=0
@@ -102,28 +111,26 @@ Step 2/2
   wn1                        7.0101e-05      7.0101e-05
   wp3                        6.9704e-05      6.9704e-05
   wn3                        3.2085e-05      3.2085e-05
-  wn4                         1.241e-06       1.241e-06
+  wn4                        1.241e-06       1.241e-06
   wn5                            0.0001          0.0001
   cc                              1e-13           1e-13
 
 Episode 1 finished: step limit reached; steps=2; return=-8.166371
 ```
 
-Each specification row shows the current circuit value, its target inequality,
-and the two normalized values included in the observation. The parameter rows
-complete the 19 observation values. `State` is the physical value for continuous
-actions and the grid index for discrete actions; `Physical value` is the value
-passed to the circuit netlist.
+출력 읽는 법:
 
-`terminated=True` means the environment's success threshold was reached.
-`truncated=True` means the episode reached its step limit. The episode return is
-the sum of step rewards; this example ends after two steps with return -8.166371.
-The simulation line identifies the corners that were actually evaluated. Here
-only nominal TT runs because its goal checks fail. Add `--full-corners` to
-evaluate all configured corners at every reset and step, or `--tt-only` to
-simulate only the nominal TT netlist (the first `dsn_netlist` entry).
+- `Specification` 줄: 스펙(성능)마다 지금 회로의 값(`Current`), 목표 부등호(`Target`), 관측에 들어가는
+  정규화된 값 두 개(`Obs.current`, `Obs.target`). 이름이 `_min` 이면 그 값 **이상**, `_max` 면 **이하** 여야 합격입니다.
+- `Parameter` 줄: 관측 19개 중 나머지 7개. `State` 는 연속 행동일 때 물리값 그대로, 이산 행동일 때 격자 번호이고,
+  `Physical value` 는 실제로 넷리스트에 들어가는 값입니다.
+- `terminated=True` 는 목표를 달성해 끝났다는 뜻, `truncated=True` 는 step 수 제한에 걸려 끊겼다는 뜻입니다.
+  에피소드 return 은 step 보상의 합이고, 이 예에서는 두 step 뒤 -8.166371 입니다.
+- `Simulation` 줄은 실제로 시뮬레이션한 corner 를 알려 줍니다. 여기서는 기본 조건(TT)에서 목표를 못 넘어서
+  TT 만 돌렸습니다 (SoF: Skip on Fail). `--full-corners` 를 붙이면 reset 과 step 마다 모든 corner 를 돌리고,
+  `--tt-only` 를 붙이면 TT 넷리스트(`dsn_netlist` 의 첫 번째)만 돌립니다.
 
-The environment follows the Gymnasium reset/step API:
+환경은 Gymnasium 의 reset/step 방식을 그대로 따릅니다 (ex01 과 같음):
 
 ```python
 from analog_sizing.config import benchmark_config
@@ -131,32 +138,29 @@ from analog_sizing.envs.ngspice_env import ngspice_env_cont
 
 env = ngspice_env_cont({**benchmark_config("TSA"), "episode_len": 30})
 try:
-    observation, info = env.reset(seed=0)
-    action = env.action_space.sample()
+    observation, info = env.reset(seed=0)                     # 새 게임 시작: 목표를 정하고 처음 크기로 시뮬레이션
+    action = env.action_space.sample()                        # 크기 7개를 얼마나 바꿀지, 각각 [-1, 1]
     observation, reward, terminated, truncated, info = env.step(action)
 finally:
     env.close()
 ```
 
-## Train
+## 학습
 
 ```bash
 python analog_sizing/train.py --env_name TSA --algo SAC --total_timesteps 12000
 bash scripts/TSA.sh
 ```
 
-Launchers are also available for `CMA`, `LDO`, and `COMP`. Their arguments can be
-overridden by appending options, for example `bash scripts/TSA.sh --seed 42`.
-Both direct scripts and `python -m analog_sizing.train` are supported.
+`CMA`, `LDO`, `COMP` 실행 스크립트도 있습니다. 옵션을 뒤에 붙이면 스크립트의 값을 바꿀 수 있습니다
+(예: `bash scripts/TSA.sh --seed 42`). `python -m analog_sizing.train` 으로 실행해도 됩니다.
 
-By default, success requires the worst value over all PVT corners to meet every
-target. Add `--tt_only True` to train and evaluate on the nominal TT netlist only
-(one simulation per step), for example `bash scripts/LDO.sh --tt_only True`.
-Designs found this way are not checked across corners.
+기본값에서는 모든 PVT corner 의 최악값이 모든 목표를 넘어야 성공입니다. `--tt_only True` 를 붙이면
+TT 넷리스트 하나만으로 학습하고 평가합니다 (step 당 시뮬레이션 1번, 예: `bash scripts/LDO.sh --tt_only True`).
+이렇게 찾은 설계는 다른 corner 에서 확인되지 않은 것입니다 (ex08 참고).
 
-Training and evaluation metrics are recorded locally using the SB3 logger.
-TensorBoard logs are written under `logs/<algorithm>/` and model directories
-under `models/`. Use `--name` to distinguish runs.
+학습 · 평가 기록은 SB3 logger 로 저장됩니다. TensorBoard 로그는 `logs/<알고리즘>/`, 모델은 `models/` 에 생깁니다.
+실행을 구분하려면 `--name` 을 쓰세요.
 
 ```bash
 tensorboard --logdir logs
@@ -166,61 +170,60 @@ tensorboard --logdir logs
 python analog_sizing/train.py --help
 ```
 
-## Generate evaluation targets
+## 평가용 목표 만들기
 
 ```bash
 python analog_sizing/gen_specs.py --env TSA --num-specs 100 --seed 0
 ```
 
-Use `--yaml` to choose another benchmark YAML or `--output` to set the pickle
-output path. Bare spec filenames are loaded from `analog_sizing/gen_specs/`;
-other relative configuration and output paths are resolved from the repository
-root. Built-in evaluation data is preserved separately from newly generated data.
+다른 벤치마크 YAML 은 `--yaml`, 저장할 pickle 경로는 `--output` 으로 고릅니다. 경로 없이 파일 이름만 주면
+`analog_sizing/gen_specs/` 에서 읽고, 그 밖의 상대 경로는 저장소 맨 위 폴더 기준입니다.
+함께 들어 있는 평가 목표 파일은 새로 만든 것과 따로 보관됩니다.
 
-## Practice examples and automatic layout
+## 연습 예제와 자동 레이아웃
 
-`ex01`–`ex05` implement actor-critic, SAC, and PPO from scratch on Gymnasium tasks.
-`ex06` and `ex07` solve the same Pendulum task with Stable-Baselines3 SAC and PPO.
-`ex08`–`ex10` apply Stable-Baselines3 SAC to the SKY130 LDO from start to finish:
+- `ex00` 은 학습 없이 회로 환경(LDO)을 둘러봅니다.
+- `ex01`–`ex05` 는 Gymnasium 기본 게임으로 Actor-Critic, SAC, PPO 를 직접 만듭니다.
+- `ex06`, `ex07` 은 같은 Pendulum 문제를 Stable-Baselines3 의 SAC, PPO 로 풉니다.
+- `ex08`–`ex10` 은 Stable-Baselines3 SAC 를 SKY130 LDO 에 처음부터 끝까지 적용합니다:
 
 ```bash
-python ex06_sac_sb3.py                 # ex04 with Stable-Baselines3
-python ex07_ppo_sb3.py                 # ex05 with Stable-Baselines3
-python ex08_ldo_tt_sac.py              # TT corner only, then check the design on 9 PVT corners
-python ex09_ldo_pvt_sac.py             # 9 PVT corners with estimated layout parasitics
-python ex10_ldo_layout_postlayout.py   # ALIGN layout, extraction, post-layout PVT check
+python ex00_circuit_env.py             # 회로 환경 둘러보기: 관측 · 행동 · 보상, 9개 PVT corner (학습 없음)
+python ex06_sac_sb3.py                 # ex04 를 Stable-Baselines3 로
+python ex07_ppo_sb3.py                 # ex05 를 Stable-Baselines3 로
+python ex08_ldo_tt_sac.py              # TT corner 하나만 보고 학습 -> 찾은 설계를 9개 PVT corner 에서 확인
+python ex09_ldo_pvt_sac.py             # 9개 PVT corner + 레이아웃 기생 추정을 보고 학습
+python ex10_ldo_layout_postlayout.py   # ALIGN 레이아웃 -> 기생 추출 -> 레이아웃 후 9개 PVT 확인
 ```
 
-`ex10` and `layout/run_ldo_layout.sh` need ALIGN. Installation, expected output, and
-the example specification are described in [docs/MANUAL.md](docs/MANUAL.md)
-(sections 8 and 9).
+`ex10` 과 `layout/run_ldo_layout.sh` 에는 ALIGN 이 필요합니다. 설치 방법, 예상 출력, 예제 스펙은
+[docs/MANUAL.md](docs/MANUAL.md) 8장과 9장에 있습니다.
 
-## Repository layout
+## 저장소 구성
 
 ```text
 analog_sizing/
-  config.py            # Benchmark names, YAML loading, and repository paths
-  envs/                # Base, action-space, and goal-conditioned environments
-  callbacks.py         # Simulation accounting, evaluation, and checkpoints
-  train.py             # Stable-Baselines3 training CLI
-  gen_specs.py         # Seeded evaluation-target generator
-  gen_specs/           # Bundled evaluation targets
+  config.py            # 벤치마크 이름, YAML 읽기, 저장소 경로
+  envs/                # 환경: 공통 뼈대(ngspice_env_base.py)와 연속 · 이산 행동(ngspice_env.py)
+  callbacks.py         # 시뮬레이션 횟수 집계, 평가, 모델 저장
+  train.py             # Stable-Baselines3 학습 명령
+  gen_specs.py         # seed 로 평가용 목표 만들기
+  gen_specs/           # 함께 들어 있는 평가용 목표
 eval_engines/
-  ngspice/             # Simulation wrappers, circuit measurements, and netlists
-  pdk/                 # GF180 and SKY130 models
-scripts/               # Circuit launchers and random-rollout example
-tests/                 # Environment and simulation-wrapper regression checks
-layout/                # ALIGN layout and post-layout scripts for the LDO
-ex01_*.py ... ex10_*.py  # Practice examples (ex_ldo_common.py is shared by ex08-ex10)
-docs/MANUAL.md         # Step-by-step manual (Korean)
+  ngspice/             # 시뮬레이션 실행, 회로 측정, 넷리스트
+  pdk/                 # GF180, SKY130 회로 모델
+scripts/               # 회로별 실행 스크립트, 무작위 rollout 예제
+tests/                 # 환경과 시뮬레이션 회귀 테스트
+layout/                # LDO 용 ALIGN 레이아웃 · post-layout 스크립트
+ex00_*.py ... ex10_*.py  # 연습 예제 (ex_ldo_common.py 는 ex00, ex08-ex10 이 같이 씀)
+docs/MANUAL.md         # 단계별 매뉴얼
+slides/                # 강의 · 발표 자료
 ```
 
-Run the regression tests with `python -m pytest -q tests` after installing `pytest`
-in the project environment.
+회귀 테스트는 프로젝트 환경에 `pytest` 를 설치한 뒤 `python -m pytest -q tests` 로 돌립니다.
 
-## Attribution
+## 만든 사람
 
-The original implementation is by [Seunggeun Kim](https://seunggeunkimkr.github.io),
-Ziyi Wang, Sungyoung Lee, Youngmin Oh, Hanqing Zhu, Doyun Kim, and David Z. Pan.
-See the [upstream research paper (ICCAD 2025)](https://arxiv.org/abs/2507.17003).
-Parts of this codebase were adapted from [AutoCkt](https://github.com/ksettaluri6/AutoCkt).
+원래 구현은 [Seunggeun Kim](https://seunggeunkimkr.github.io), Ziyi Wang, Sungyoung Lee, Youngmin Oh,
+Hanqing Zhu, Doyun Kim, David Z. Pan 이 했습니다. [원 논문 (ICCAD 2025)](https://arxiv.org/abs/2507.17003) 을 참고하세요.
+코드 일부는 [AutoCkt](https://github.com/ksettaluri6/AutoCkt) 에서 가져와 고쳤습니다.

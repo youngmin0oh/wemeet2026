@@ -1,5 +1,5 @@
 """
-ex08 · ex09 · ex10 이 같이 쓰는 도구 (LDO, SKY130)
+ex00 · ex08 · ex09 · ex10 이 같이 쓰는 도구 (LDO, SKY130)
 
     SPEC                  예제 스펙 (레이아웃 후에도 9개 PVT corner 에서 지켜야 하는 값)
     make_env()            Gymnasium 환경 (TT 만 / 9개 PVT, 기생 추정 포함 여부)
